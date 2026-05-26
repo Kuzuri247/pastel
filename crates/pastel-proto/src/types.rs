@@ -127,12 +127,59 @@ pub struct ChatLine {
     pub text: String,
 }
 
+/// Phase-aware game snapshot, included in `RoomSnapshot` so a fresh `Welcome`
+/// can rehydrate a client mid-game. Deadlines are relative milliseconds from
+/// "now" on the server, so the client adds them to its local clock without
+/// needing wall-clock sync.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum GamePhaseSnapshot {
+    Lobby,
+    ChoosingWord {
+        drawer: PlayerId,
+        deadline_ms: u32,
+        round_index: u8,
+        total_rounds: u8,
+    },
+    Drawing {
+        drawer: PlayerId,
+        mask: String,
+        deadline_ms: u32,
+        round_index: u8,
+        total_rounds: u8,
+    },
+    RoundEnd {
+        word: String,
+        deadline_ms: u32,
+    },
+    GameOver,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GameSnapshot {
+    pub mode: GameMode,
+    pub host: Option<PlayerId>,
+    pub scores: Vec<(PlayerId, u32)>,
+    pub phase: GamePhaseSnapshot,
+}
+
+impl Default for GameSnapshot {
+    fn default() -> Self {
+        Self {
+            mode: GameMode::Standard,
+            host: None,
+            scores: Vec::new(),
+            phase: GamePhaseSnapshot::Lobby,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RoomSnapshot {
     pub players: Vec<Player>,
     pub completed: Vec<CompletedStroke>,
     pub seq: Seq,
     pub chat: Vec<ChatLine>,
+    pub game: GameSnapshot,
 }
 
 #[cfg(test)]
