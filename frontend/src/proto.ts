@@ -145,8 +145,48 @@ function readSnapshot(r: Reader): RoomSnapshot {
 
 // --------- enums ---------------------------------------------------------
 
+export type GameMode = "Sprint" | "Standard" | "Marathon";
+
+const GAME_MODE_ORDER: GameMode[] = ["Sprint", "Standard", "Marathon"];
+
+function writeGameMode(w: Writer, m: GameMode): void {
+  const idx = GAME_MODE_ORDER.indexOf(m);
+  if (idx < 0) throw new Error(`unknown GameMode: ${m}`);
+  w.variant(idx);
+}
+
+function readGameMode(r: Reader): GameMode {
+  const v = r.variant();
+  if (v < 0 || v >= GAME_MODE_ORDER.length) {
+    throw new Error(`unknown GameMode variant: ${v}`);
+  }
+  return GAME_MODE_ORDER[v];
+}
+
+export function modeRounds(m: GameMode): number {
+  switch (m) {
+    case "Sprint":
+      return 3;
+    case "Standard":
+      return 5;
+    case "Marathon":
+      return 7;
+  }
+}
+
+export function modeWordOptions(m: GameMode): number {
+  switch (m) {
+    case "Sprint":
+      return 7;
+    case "Standard":
+      return 5;
+    case "Marathon":
+      return 3;
+  }
+}
+
 export type GameAction =
-  | { kind: "Start" }
+  | { kind: "Start"; mode: GameMode }
   | { kind: "PickWord"; index: number }
   | { kind: "Kick"; player: number }
   | { kind: "Clear" };
@@ -154,7 +194,9 @@ export type GameAction =
 function writeGameAction(w: Writer, a: GameAction): void {
   switch (a.kind) {
     case "Start":
-      return void w.variant(0);
+      w.variant(0);
+      writeGameMode(w, a.mode);
+      return;
     case "PickWord":
       w.variant(1).u8(a.index);
       return;
@@ -170,7 +212,7 @@ function readGameAction(r: Reader): GameAction {
   const v = r.variant();
   switch (v) {
     case 0:
-      return { kind: "Start" };
+      return { kind: "Start", mode: readGameMode(r) };
     case 1:
       return { kind: "PickWord", index: r.u8() };
     case 2:
@@ -183,10 +225,25 @@ function readGameAction(r: Reader): GameAction {
 }
 
 export type GameEvent =
-  | { kind: "RoundStart"; drawer: number; word_mask: string; duration_ms: number }
+  | {
+      kind: "RoundStart";
+      drawer: number;
+      word_mask: string;
+      duration_ms: number;
+      round_index: number;
+      total_rounds: number;
+    }
   | { kind: "RoundEnd"; word: string; scores: [number, number][] }
   | { kind: "GameOver"; final_scores: [number, number][] }
-  | { kind: "Cleared"; by: number };
+  | { kind: "Cleared"; by: number }
+  | {
+      kind: "WordPickStarted";
+      drawer: number;
+      deadline_ms: number;
+      round_index: number;
+      total_rounds: number;
+    }
+  | { kind: "HintReveal"; mask: string };
 
 function writeScores(w: Writer, scores: [number, number][]): void {
   w.varint(scores.length);
@@ -203,7 +260,12 @@ function readScores(r: Reader): [number, number][] {
 function writeGameEvent(w: Writer, e: GameEvent): void {
   switch (e.kind) {
     case "RoundStart":
-      w.variant(0).varint(e.drawer).str(e.word_mask).varint(e.duration_ms);
+      w.variant(0)
+        .varint(e.drawer)
+        .str(e.word_mask)
+        .varint(e.duration_ms)
+        .u8(e.round_index)
+        .u8(e.total_rounds);
       return;
     case "RoundEnd":
       w.variant(1).str(e.word);
@@ -215,6 +277,16 @@ function writeGameEvent(w: Writer, e: GameEvent): void {
       return;
     case "Cleared":
       w.variant(3).varint(e.by);
+      return;
+    case "WordPickStarted":
+      w.variant(4)
+        .varint(e.drawer)
+        .varint(e.deadline_ms)
+        .u8(e.round_index)
+        .u8(e.total_rounds);
+      return;
+    case "HintReveal":
+      w.variant(5).str(e.mask);
       return;
   }
 }
@@ -228,6 +300,8 @@ function readGameEvent(r: Reader): GameEvent {
         drawer: r.varint(),
         word_mask: r.str(),
         duration_ms: r.varint(),
+        round_index: r.u8(),
+        total_rounds: r.u8(),
       };
     case 1:
       return { kind: "RoundEnd", word: r.str(), scores: readScores(r) };
@@ -235,6 +309,16 @@ function readGameEvent(r: Reader): GameEvent {
       return { kind: "GameOver", final_scores: readScores(r) };
     case 3:
       return { kind: "Cleared", by: r.varint() };
+    case 4:
+      return {
+        kind: "WordPickStarted",
+        drawer: r.varint(),
+        deadline_ms: r.varint(),
+        round_index: r.u8(),
+        total_rounds: r.u8(),
+      };
+    case 5:
+      return { kind: "HintReveal", mask: r.str() };
     default:
       throw new Error(`unknown GameEvent variant: ${v}`);
   }
@@ -412,7 +496,9 @@ export type ServerMsg =
   | { kind: "Presence"; seq: number; joined: Player[]; left: number[] }
   | { kind: "Game"; seq: number; event: GameEvent }
   | { kind: "Ping"; nonce: number }
-  | { kind: "Bye"; reason: ByeReason };
+  | { kind: "Bye"; reason: ByeReason }
+  | { kind: "WordOptions"; words: string[]; deadline_ms: number }
+  | { kind: "DrawerWord"; word: string; duration_ms: number };
 
 export function encodeServerMsg(msg: ServerMsg): Uint8Array<ArrayBuffer> {
   const w = new Writer();
@@ -465,6 +551,14 @@ function writeServerMsg(w: Writer, msg: ServerMsg): void {
     case "Bye":
       w.variant(8);
       writeByeReason(w, msg.reason);
+      return;
+    case "WordOptions":
+      w.variant(9)
+        .vec(msg.words, (ww, s) => ww.str(s))
+        .varint(msg.deadline_ms);
+      return;
+    case "DrawerWord":
+      w.variant(10).str(msg.word).varint(msg.duration_ms);
       return;
   }
 }
@@ -521,6 +615,18 @@ function readServerMsg(r: Reader): ServerMsg {
       return { kind: "Ping", nonce: r.varint() };
     case 8:
       return { kind: "Bye", reason: readByeReason(r) };
+    case 9:
+      return {
+        kind: "WordOptions",
+        words: r.vec((rr) => rr.str()),
+        deadline_ms: r.varint(),
+      };
+    case 10:
+      return {
+        kind: "DrawerWord",
+        word: r.str(),
+        duration_ms: r.varint(),
+      };
     default:
       throw new Error(`unknown ServerMsg variant: ${v}`);
   }

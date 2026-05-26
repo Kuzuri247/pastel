@@ -188,7 +188,7 @@ describe("client/server round-trips", () => {
     },
     { kind: "Chat", text: "hello world" },
     { kind: "Guess", text: "apple" },
-    { kind: "Game", action: { kind: "Start" } },
+    { kind: "Game", action: { kind: "Start", mode: "Standard" } },
     { kind: "Game", action: { kind: "PickWord", index: 2 } },
     { kind: "Game", action: { kind: "Kick", player: 7 } },
     { kind: "Pong", nonce: 0xdeadbeef },
@@ -245,10 +245,39 @@ describe("client/server round-trips", () => {
     {
       kind: "Game",
       seq: 8,
-      event: { kind: "RoundStart", drawer: 1, word_mask: "_____", duration_ms: 60000 },
+      event: {
+        kind: "RoundStart",
+        drawer: 1,
+        word_mask: "_____",
+        duration_ms: 60000,
+        round_index: 0,
+        total_rounds: 5,
+      },
     },
     { kind: "Ping", nonce: 1 },
     { kind: "Bye", reason: "RoomFull" },
+    {
+      kind: "WordOptions",
+      words: ["cat", "dog", "tree"],
+      deadline_ms: 15000,
+    },
+    { kind: "DrawerWord", word: "apple", duration_ms: 80000 },
+    {
+      kind: "Game",
+      seq: 9,
+      event: {
+        kind: "WordPickStarted",
+        drawer: 1,
+        deadline_ms: 15000,
+        round_index: 0,
+        total_rounds: 5,
+      },
+    },
+    {
+      kind: "Game",
+      seq: 10,
+      event: { kind: "HintReveal", mask: "_a___" },
+    },
     {
       kind: "Resume",
       events: [
