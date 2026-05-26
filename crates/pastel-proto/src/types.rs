@@ -1,0 +1,133 @@
+use crate::limits::ROOM_CODE_LEN;
+use serde::{Deserialize, Serialize};
+use std::fmt;
+
+pub type Seq = u64;
+pub type PlayerId = u32;
+
+const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum RoomCodeError {
+    #[error("expected {ROOM_CODE_LEN} characters, got {0}")]
+    WrongLength(usize),
+    #[error("character '{0}' is not in the room-code alphabet")]
+    InvalidChar(char),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct RoomCode([u8; ROOM_CODE_LEN]);
+
+impl RoomCode {
+    pub fn from_bytes(b: [u8; ROOM_CODE_LEN]) -> Result<Self, RoomCodeError> {
+        for &c in &b {
+            if !ALPHABET.contains(&c) {
+                return Err(RoomCodeError::InvalidChar(c as char));
+            }
+        }
+        Ok(Self(b))
+    }
+
+    pub fn parse(s: &str) -> Result<Self, RoomCodeError> {
+        let bytes = s.as_bytes();
+        if bytes.len() != ROOM_CODE_LEN {
+            return Err(RoomCodeError::WrongLength(bytes.len()));
+        }
+        let mut out = [0u8; ROOM_CODE_LEN];
+        for (i, &c) in bytes.iter().enumerate() {
+            let upper = c.to_ascii_uppercase();
+            let canonical = match upper {
+                b'I' | b'L' => b'1',
+                b'O' => b'0',
+                b'U' => b'V',
+                other => other,
+            };
+            if !ALPHABET.contains(&canonical) {
+                return Err(RoomCodeError::InvalidChar(c as char));
+            }
+            out[i] = canonical;
+        }
+        Ok(Self(out))
+    }
+
+    pub fn as_str(&self) -> &str {
+        std::str::from_utf8(&self.0).expect("room code bytes are always ASCII alphabet")
+    }
+
+    pub fn as_bytes(&self) -> &[u8; ROOM_CODE_LEN] {
+        &self.0
+    }
+}
+
+impl fmt::Debug for RoomCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "RoomCode({})", self.as_str())
+    }
+}
+
+impl fmt::Display for RoomCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Point {
+    pub dx: i8,
+    pub dy: i8,
+    pub dt: u8,
+    pub pressure: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Player {
+    pub id: PlayerId,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CompletedStroke {
+    pub player: PlayerId,
+    pub stroke_id: u32,
+    pub origin: (u16, u16),
+    pub points: Vec<Point>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RoomSnapshot {
+    pub players: Vec<Player>,
+    pub completed: Vec<CompletedStroke>,
+    pub seq: Seq,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn room_code_parse_canonical() {
+        let c = RoomCode::parse("abc234").unwrap();
+        assert_eq!(c.as_str(), "ABC234");
+    }
+
+    #[test]
+    fn room_code_substitutes_ambiguous() {
+        assert_eq!(RoomCode::parse("ILOABC").unwrap().as_str(), "110ABC");
+    }
+
+    #[test]
+    fn room_code_rejects_bad_chars() {
+        assert!(matches!(
+            RoomCode::parse("ABCDE!"),
+            Err(RoomCodeError::InvalidChar(_))
+        ));
+    }
+
+    #[test]
+    fn room_code_rejects_bad_length() {
+        assert!(matches!(
+            RoomCode::parse("ABC"),
+            Err(RoomCodeError::WrongLength(3))
+        ));
+    }
+}
