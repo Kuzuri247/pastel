@@ -786,6 +786,7 @@ dependencies = [
  "ahash",
  "pastel-proto",
  "postcard",
+ "rand 0.8.6",
  "serde",
  "thiserror 1.0.69",
  "tokio",
