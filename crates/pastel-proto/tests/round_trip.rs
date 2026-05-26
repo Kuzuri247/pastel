@@ -39,12 +39,19 @@ fn arb_player() -> impl Strategy<Value = Player> {
     (any::<u32>(), arb_name()).prop_map(|(id, name)| Player { id, name })
 }
 
+// Realistic, not pathological. These bounds keep every generated message
+// inside MAX_FRAME_BYTES even when nested inside a Resume.
+const PROPTEST_POINTS_PER_COMPLETED_STROKE: usize = 64;
+const PROPTEST_STROKES_PER_SNAPSHOT: usize = 8;
+const PROPTEST_LK_TOKEN_LEN: usize = 128;
+const PROPTEST_RESUME_EVENTS: usize = 4;
+
 fn arb_completed_stroke() -> impl Strategy<Value = CompletedStroke> {
     (
         any::<u32>(),
         any::<u32>(),
         (any::<u16>(), any::<u16>()),
-        arb_points(MAX_POINTS_PER_BATCH * 4),
+        arb_points(PROPTEST_POINTS_PER_COMPLETED_STROKE),
     )
         .prop_map(|(player, stroke_id, origin, points)| CompletedStroke {
             player,
@@ -57,7 +64,7 @@ fn arb_completed_stroke() -> impl Strategy<Value = CompletedStroke> {
 fn arb_snapshot() -> impl Strategy<Value = RoomSnapshot> {
     (
         vec(arb_player(), 0..=MAX_PLAYERS_PER_ROOM),
-        vec(arb_completed_stroke(), 0..=32),
+        vec(arb_completed_stroke(), 0..=PROPTEST_STROKES_PER_SNAPSHOT),
         any::<u64>(),
     )
         .prop_map(|(players, completed, seq)| RoomSnapshot {
@@ -149,7 +156,7 @@ fn arb_server_leaf_msg() -> impl Strategy<Value = ServerMsg> {
             any::<u32>(),
             arb_snapshot(),
             any::<u64>(),
-            arb_text(MAX_LK_TOKEN_LEN)
+            arb_text(PROPTEST_LK_TOKEN_LEN)
         )
             .prop_map(|(you, snapshot, seq, lk_token)| ServerMsg::Welcome {
                 you,
@@ -194,7 +201,8 @@ fn arb_server_leaf_msg() -> impl Strategy<Value = ServerMsg> {
 fn arb_server_msg() -> impl Strategy<Value = ServerMsg> {
     prop_oneof![
         arb_server_leaf_msg(),
-        vec(arb_server_leaf_msg(), 0..=16).prop_map(|events| ServerMsg::Resume { events }),
+        vec(arb_server_leaf_msg(), 0..=PROPTEST_RESUME_EVENTS)
+            .prop_map(|events| ServerMsg::Resume { events }),
     ]
 }
 
