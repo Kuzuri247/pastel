@@ -20,3 +20,11 @@ cargo build --workspace
 cargo test  --workspace
 cargo run -p pastel-server
 ```
+
+After cloning, point git at the in-repo hooks once:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+This installs a pre-commit hook that runs `cargo fmt --check`.
