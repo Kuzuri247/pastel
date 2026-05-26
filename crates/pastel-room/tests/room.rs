@@ -102,6 +102,8 @@ async fn stroke_broadcasts_with_monotonic_seq() {
         ClientMsg::Stroke {
             stroke_id: 1,
             origin: (10, 20),
+            color: 0xd62828,
+            width: 4,
             points: vec![Point {
                 dx: 1,
                 dy: 1,
@@ -118,12 +120,16 @@ async fn stroke_broadcasts_with_monotonic_seq() {
             seq,
             player,
             stroke_id,
+            color,
+            width,
             points,
             finished,
             ..
         } => {
             assert_eq!(*player, a.you);
             assert_eq!(*stroke_id, 1);
+            assert_eq!(*color, 0xd62828);
+            assert_eq!(*width, 4);
             assert_eq!(points.len(), 1);
             assert!(!finished);
             assert!(*seq >= 2, "seq should advance after presence");
@@ -291,6 +297,8 @@ async fn ten_players_thousand_strokes_arrive_ordered() {
                 ClientMsg::Stroke {
                     stroke_id: s,
                     origin: (0, 0),
+                    color: 0,
+                    width: 4,
                     points: vec![Point {
                         dx: 0,
                         dy: 0,
