@@ -22,6 +22,7 @@ thiserror = "1"
 anyhow = "1"
 bytes = "1"
 ahash = "0.8"
+rand = "0.8"
 
 # server-only
 axum = { version = "0.7", features = ["ws", "macros"] }
