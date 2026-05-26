@@ -29,6 +29,8 @@ fn client_stroke_single_point_fixture() {
     let msg = ClientMsg::Stroke {
         stroke_id: 7,
         origin: (0, 0),
+        color: 0,
+        width: 4,
         points: vec![Point {
             dx: 1,
             dy: -2,
@@ -37,7 +39,9 @@ fn client_stroke_single_point_fixture() {
         }],
         finished: false,
     };
-    assert_eq!(hex(&encode(&msg).unwrap()), "010700000101fe10c800");
+    // variant 1, stroke_id 7, origin 0 0, color 0, width 4, len 1, point
+    // [01 fe 10 c8], finished 0.
+    assert_eq!(hex(&encode(&msg).unwrap()), "0107000000040101fe10c800");
 }
 
 #[test]

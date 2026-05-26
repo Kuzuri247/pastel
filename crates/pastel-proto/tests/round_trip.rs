@@ -51,14 +51,20 @@ fn arb_completed_stroke() -> impl Strategy<Value = CompletedStroke> {
         any::<u32>(),
         any::<u32>(),
         (any::<u16>(), any::<u16>()),
+        0u32..=0xffffff,
+        any::<u8>(),
         arb_points(PROPTEST_POINTS_PER_COMPLETED_STROKE),
     )
-        .prop_map(|(player, stroke_id, origin, points)| CompletedStroke {
-            player,
-            stroke_id,
-            origin,
-            points,
-        })
+        .prop_map(
+            |(player, stroke_id, origin, color, width, points)| CompletedStroke {
+                player,
+                stroke_id,
+                origin,
+                color,
+                width,
+                points,
+            },
+        )
 }
 
 fn arb_snapshot() -> impl Strategy<Value = RoomSnapshot> {
@@ -92,6 +98,7 @@ fn arb_game_action() -> impl Strategy<Value = GameAction> {
         Just(GameAction::Start),
         any::<u8>().prop_map(GameAction::PickWord),
         any::<u32>().prop_map(GameAction::Kick),
+        Just(GameAction::Clear),
     ]
 }
 
@@ -111,6 +118,7 @@ fn arb_game_event() -> impl Strategy<Value = GameEvent> {
             .prop_map(|(word, scores)| GameEvent::RoundEnd { word, scores }),
         vec((any::<u32>(), any::<u32>()), 0..=MAX_PLAYERS_PER_ROOM)
             .prop_map(|final_scores| GameEvent::GameOver { final_scores }),
+        any::<u32>().prop_map(|by| GameEvent::Cleared { by }),
     ]
 }
 
@@ -134,14 +142,20 @@ fn arb_client_msg() -> impl Strategy<Value = ClientMsg> {
         (
             any::<u32>(),
             (any::<u16>(), any::<u16>()),
+            0u32..=0xffffff,
+            any::<u8>(),
             arb_points(MAX_POINTS_PER_BATCH),
             any::<bool>(),
         )
-            .prop_map(|(stroke_id, origin, points, finished)| ClientMsg::Stroke {
-                stroke_id,
-                origin,
-                points,
-                finished,
+            .prop_map(|(stroke_id, origin, color, width, points, finished)| {
+                ClientMsg::Stroke {
+                    stroke_id,
+                    origin,
+                    color,
+                    width,
+                    points,
+                    finished,
+                }
             }),
         arb_text(MAX_CHAT_LEN).prop_map(|text| ClientMsg::Chat { text }),
         arb_text(MAX_GUESS_LEN).prop_map(|text| ClientMsg::Guess { text }),
@@ -169,19 +183,25 @@ fn arb_server_leaf_msg() -> impl Strategy<Value = ServerMsg> {
             any::<u32>(),
             any::<u32>(),
             (any::<u16>(), any::<u16>()),
+            0u32..=0xffffff,
+            any::<u8>(),
             arb_points(MAX_POINTS_PER_BATCH),
             any::<bool>(),
         )
-            .prop_map(|(seq, player, stroke_id, origin, points, finished)| {
-                ServerMsg::Stroke {
-                    seq,
-                    player,
-                    stroke_id,
-                    origin,
-                    points,
-                    finished,
-                }
-            }),
+            .prop_map(
+                |(seq, player, stroke_id, origin, color, width, points, finished)| {
+                    ServerMsg::Stroke {
+                        seq,
+                        player,
+                        stroke_id,
+                        origin,
+                        color,
+                        width,
+                        points,
+                        finished,
+                    }
+                },
+            ),
         (any::<u64>(), any::<u32>(), arb_text(MAX_CHAT_LEN))
             .prop_map(|(seq, player, text)| ServerMsg::Chat { seq, player, text }),
         (any::<u64>(), any::<u32>(), arb_guess_kind())
@@ -257,6 +277,8 @@ fn validation_rejects_oversize_stroke_batch() {
     let msg = ClientMsg::Stroke {
         stroke_id: 1,
         origin: (0, 0),
+        color: 0,
+        width: 4,
         points: vec![
             Point {
                 dx: 0,
@@ -310,6 +332,8 @@ fn stroke_batch_size_budget() {
     let msg = ClientMsg::Stroke {
         stroke_id: 7,
         origin: (320, 240),
+        color: 0xd62828,
+        width: 4,
         points: vec![
             Point {
                 dx: 1,
@@ -323,7 +347,7 @@ fn stroke_batch_size_budget() {
     };
     let bytes = encode(&msg).unwrap();
     assert!(
-        bytes.len() < 140,
+        bytes.len() < 150,
         "30-point batch was {} bytes",
         bytes.len()
     );
@@ -334,6 +358,8 @@ fn stroke_batch_worst_case_size_budget() {
     let msg = ClientMsg::Stroke {
         stroke_id: u32::MAX,
         origin: (u16::MAX, u16::MAX),
+        color: 0xffffff,
+        width: 255,
         points: vec![
             Point {
                 dx: 127,
@@ -347,7 +373,7 @@ fn stroke_batch_worst_case_size_budget() {
     };
     let bytes = encode(&msg).unwrap();
     assert!(
-        bytes.len() < 300,
+        bytes.len() < 320,
         "{}-point worst-case batch was {} bytes",
         MAX_POINTS_PER_BATCH,
         bytes.len()
