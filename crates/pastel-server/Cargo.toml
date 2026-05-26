@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[lib]
+name = "pastel_server"
+path = "src/lib.rs"
+
 [[bin]]
 name = "pastel-server"
 path = "src/main.rs"
@@ -13,11 +17,11 @@ pastel-proto = { path = "../pastel-proto" }
 pastel-room = { path = "../pastel-room" }
 axum = { workspace = true }
 tokio = { workspace = true }
-tokio-tungstenite = { workspace = true }
 dashmap = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
-serde = { workspace = true }
-postcard = { workspace = true }
-bytes = { workspace = true }
+
+[dev-dependencies]
+tokio-tungstenite = { workspace = true }
+futures-util = "0.3"
