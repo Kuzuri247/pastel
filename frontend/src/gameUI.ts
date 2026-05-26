@@ -10,12 +10,14 @@ export interface GameUIHandlers {
   onRematch: () => void;
 }
 
+export interface RenderContext {
+  you: number | null;
+  host: number | null;
+  nameOf: (id: number) => string;
+}
+
 export interface GameUI {
-  render(
-    phase: GamePhase,
-    you: number | null,
-    playerName: (id: number) => string,
-  ): void;
+  render(phase: GamePhase, ctx: RenderContext): void;
   /// Returns the current word/mask to render in the top banner. null if no
   /// game is running.
   bannerText(phase: GamePhase): string | null;
@@ -34,8 +36,19 @@ export function mountGameUI(root: HTMLElement, handlers: GameUIHandlers): GameUI
     root.classList.add("game-overlay--visible");
   }
 
-  function renderLobby(): void {
+  function renderLobby(ctx: RenderContext): void {
     visible();
+    const isHost = ctx.you !== null && ctx.you === ctx.host;
+    if (!isHost) {
+      const hostName = ctx.host !== null ? ctx.nameOf(ctx.host) : "the host";
+      root.innerHTML = `
+        <div class="overlay-card">
+          <h2>Waiting for ${escapeHtml(hostName)}</h2>
+          <p class="overlay-hint">${escapeHtml(hostName)} picks the mode and starts the game.</p>
+        </div>
+      `;
+      return;
+    }
     const options = MODE_OPTIONS.map(
       (m) => `
       <button type="button" class="mode-card" data-mode="${m.id}">
@@ -47,7 +60,7 @@ export function mountGameUI(root: HTMLElement, handlers: GameUIHandlers): GameUI
       <div class="overlay-card">
         <h2>Pick a mode</h2>
         <div class="mode-grid">${options}</div>
-        <p class="overlay-hint">Game starts as soon as you pick. At least two players in the room.</p>
+        <p class="overlay-hint">Every player draws once per round. You're the host.</p>
       </div>
     `;
     for (const btn of root.querySelectorAll<HTMLButtonElement>(".mode-card")) {
@@ -65,20 +78,26 @@ export function mountGameUI(root: HTMLElement, handlers: GameUIHandlers): GameUI
   ): void {
     visible();
     if (phase.drawer === you && phase.myOptions) {
-      const buttons = phase.myOptions
+      const cards = phase.myOptions
         .map(
-          (w, i) =>
-            `<button type="button" class="word-card" data-index="${i}">${escapeHtml(w)}</button>`,
+          (w, i) => `
+            <button type="button" class="word-pick-card" data-index="${i}">
+              <span class="word-pick-num">${String(i + 1).padStart(2, "0")}</span>
+              <span class="word-pick-word">${escapeHtml(w)}</span>
+            </button>`,
         )
         .join("");
       root.innerHTML = `
-        <div class="overlay-card">
-          <h2>Pick a word</h2>
-          <div class="word-grid">${buttons}</div>
-          <p class="overlay-hint">Round ${phase.roundIndex + 1} of ${phase.totalRounds}</p>
+        <div class="overlay-card overlay-card--wide">
+          <div class="word-pick-head">
+            <span class="word-pick-eyebrow">Round ${phase.roundIndex + 1} of ${phase.totalRounds} · your turn</span>
+            <h2>Pick a word</h2>
+          </div>
+          <div class="word-pick-grid">${cards}</div>
+          <p class="overlay-hint">Auto-picks the first if you take too long.</p>
         </div>
       `;
-      for (const btn of root.querySelectorAll<HTMLButtonElement>(".word-card")) {
+      for (const btn of root.querySelectorAll<HTMLButtonElement>(".word-pick-card")) {
         btn.addEventListener("click", () => {
           const idx = Number(btn.dataset.index);
           handlers.onPickWord(idx);
@@ -87,8 +106,11 @@ export function mountGameUI(root: HTMLElement, handlers: GameUIHandlers): GameUI
     } else {
       root.innerHTML = `
         <div class="overlay-card">
-          <h2>${escapeHtml(nameOf(phase.drawer))} is picking a word</h2>
-          <p class="overlay-hint">Round ${phase.roundIndex + 1} of ${phase.totalRounds}</p>
+          <div class="word-pick-head">
+            <span class="word-pick-eyebrow">Round ${phase.roundIndex + 1} of ${phase.totalRounds}</span>
+            <h2>${escapeHtml(nameOf(phase.drawer))} is picking a word</h2>
+          </div>
+          <p class="overlay-hint">Hang tight.</p>
         </div>
       `;
     }
@@ -141,25 +163,19 @@ export function mountGameUI(root: HTMLElement, handlers: GameUIHandlers): GameUI
       ?.addEventListener("click", handlers.onRematch);
   }
 
-  function render(
-    phase: GamePhase,
-    you: number | null,
-    nameOf: (id: number) => string,
-  ): void {
-    // Only the kinds that need an overlay show up here. Drawing just hides
-    // the overlay and lets the canvas + banner do the work.
+  function render(phase: GamePhase, ctx: RenderContext): void {
     switch (phase.kind) {
       case "Lobby":
-        renderLobby();
+        renderLobby(ctx);
         break;
       case "ChoosingWord":
-        renderChoosing(phase, you, nameOf);
+        renderChoosing(phase, ctx.you, ctx.nameOf);
         break;
       case "RoundEnd":
-        renderRoundEnd(phase, nameOf);
+        renderRoundEnd(phase, ctx.nameOf);
         break;
       case "GameOver":
-        renderGameOver(phase, nameOf);
+        renderGameOver(phase, ctx.nameOf);
         break;
       case "Drawing":
         clear();

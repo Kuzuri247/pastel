@@ -31,12 +31,14 @@ export type GamePhase =
 export interface GameState {
   phase: GamePhase;
   scores: Map<number, number>;
+  host: number | null;
 }
 
 export function emptyState(): GameState {
   return {
     phase: { kind: "Lobby" },
     scores: new Map(),
+    host: null,
   };
 }
 
