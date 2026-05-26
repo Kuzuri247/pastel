@@ -83,12 +83,15 @@ export interface CompletedStroke {
   player: number;
   stroke_id: number;
   origin: [number, number];
+  color: number;
+  width: number;
   points: Point[];
 }
 
 function writeCompletedStroke(w: Writer, s: CompletedStroke): void {
   w.varint(s.player).varint(s.stroke_id);
   w.varint(s.origin[0]).varint(s.origin[1]);
+  w.varint(s.color).u8(s.width);
   w.vec(s.points, writePoint);
 }
 
@@ -97,6 +100,8 @@ function readCompletedStroke(r: Reader): CompletedStroke {
     player: r.varint(),
     stroke_id: r.varint(),
     origin: [r.varint(), r.varint()],
+    color: r.varint(),
+    width: r.u8(),
     points: r.vec(readPoint),
   };
 }
@@ -126,7 +131,8 @@ function readSnapshot(r: Reader): RoomSnapshot {
 export type GameAction =
   | { kind: "Start" }
   | { kind: "PickWord"; index: number }
-  | { kind: "Kick"; player: number };
+  | { kind: "Kick"; player: number }
+  | { kind: "Clear" };
 
 function writeGameAction(w: Writer, a: GameAction): void {
   switch (a.kind) {
@@ -138,6 +144,8 @@ function writeGameAction(w: Writer, a: GameAction): void {
     case "Kick":
       w.variant(2).varint(a.player);
       return;
+    case "Clear":
+      return void w.variant(3);
   }
 }
 
@@ -150,6 +158,8 @@ function readGameAction(r: Reader): GameAction {
       return { kind: "PickWord", index: r.u8() };
     case 2:
       return { kind: "Kick", player: r.varint() };
+    case 3:
+      return { kind: "Clear" };
     default:
       throw new Error(`unknown GameAction variant: ${v}`);
   }
@@ -158,7 +168,8 @@ function readGameAction(r: Reader): GameAction {
 export type GameEvent =
   | { kind: "RoundStart"; drawer: number; word_mask: string; duration_ms: number }
   | { kind: "RoundEnd"; word: string; scores: [number, number][] }
-  | { kind: "GameOver"; final_scores: [number, number][] };
+  | { kind: "GameOver"; final_scores: [number, number][] }
+  | { kind: "Cleared"; by: number };
 
 function writeScores(w: Writer, scores: [number, number][]): void {
   w.varint(scores.length);
@@ -185,6 +196,9 @@ function writeGameEvent(w: Writer, e: GameEvent): void {
       w.variant(2);
       writeScores(w, e.final_scores);
       return;
+    case "Cleared":
+      w.variant(3).varint(e.by);
+      return;
   }
 }
 
@@ -202,6 +216,8 @@ function readGameEvent(r: Reader): GameEvent {
       return { kind: "RoundEnd", word: r.str(), scores: readScores(r) };
     case 2:
       return { kind: "GameOver", final_scores: readScores(r) };
+    case 3:
+      return { kind: "Cleared", by: r.varint() };
     default:
       throw new Error(`unknown GameEvent variant: ${v}`);
   }
@@ -279,6 +295,8 @@ export type ClientMsg =
       kind: "Stroke";
       stroke_id: number;
       origin: [number, number];
+      color: number;
+      width: number;
       points: Point[];
       finished: boolean;
     }
@@ -299,6 +317,8 @@ export function encodeClientMsg(msg: ClientMsg): Uint8Array<ArrayBuffer> {
         .varint(msg.stroke_id)
         .varint(msg.origin[0])
         .varint(msg.origin[1])
+        .varint(msg.color)
+        .u8(msg.width)
         .vec(msg.points, writePoint)
         .bool(msg.finished);
       break;
@@ -330,6 +350,8 @@ export function decodeClientMsg(bytes: Uint8Array): ClientMsg {
         kind: "Stroke",
         stroke_id: r.varint(),
         origin: [r.varint(), r.varint()],
+        color: r.varint(),
+        width: r.u8(),
         points: r.vec(readPoint),
         finished: r.bool(),
       };
@@ -363,6 +385,8 @@ export type ServerMsg =
       player: number;
       stroke_id: number;
       origin: [number, number];
+      color: number;
+      width: number;
       points: Point[];
       finished: boolean;
     }
@@ -396,6 +420,8 @@ function writeServerMsg(w: Writer, msg: ServerMsg): void {
         .varint(msg.stroke_id)
         .varint(msg.origin[0])
         .varint(msg.origin[1])
+        .varint(msg.color)
+        .u8(msg.width)
         .vec(msg.points, writePoint)
         .bool(msg.finished);
       return;
@@ -451,6 +477,8 @@ function readServerMsg(r: Reader): ServerMsg {
         player: r.varint(),
         stroke_id: r.varint(),
         origin: [r.varint(), r.varint()],
+        color: r.varint(),
+        width: r.u8(),
         points: r.vec(readPoint),
         finished: r.bool(),
       };
