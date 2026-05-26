@@ -1,8 +1,15 @@
 import { CHAT_BUCKET_CAPACITY, CHAT_BUCKET_REFILL_PER_SEC, TokenBucket } from "./bucket";
 import { DrawingSurface } from "./canvas";
 import { mountChat, type ChatPanel } from "./chat";
+import { applyScores, emptyState, type GamePhase, type GameState } from "./game";
+import { mountGameUI } from "./gameUI";
 import { rgbToCss } from "./palette";
-import { parseRoomCode, type Player, type ServerMsg } from "./proto";
+import {
+  parseRoomCode,
+  type GameMode,
+  type Player,
+  type ServerMsg,
+} from "./proto";
 import { loadInitialColor, loadInitialTool, mountToolbar } from "./toolbar";
 import { Conn, type ConnState } from "./ws";
 
@@ -53,6 +60,8 @@ const statusEl = document.getElementById("status") as HTMLElement;
 const playersEl = document.getElementById("players") as HTMLElement;
 const toolbarEl = document.getElementById("toolbar") as HTMLElement;
 const chatEl = document.getElementById("chat") as HTMLElement;
+const bannerEl = document.getElementById("banner") as HTMLElement;
+const overlayEl = document.getElementById("gameOverlay") as HTMLElement;
 
 const room = pickRoomCode();
 const name = pickName();
@@ -65,25 +74,11 @@ const initialTool = loadInitialTool();
 surface.setColor(initialColor);
 surface.setWidth(initialTool.width);
 
-mountToolbar(toolbarEl, {
-  onColor: (rgb) => surface.setColor(rgb),
-  onTool: (tool) => surface.setWidth(tool.width),
-  onClear: () => conn.send({ kind: "Game", action: { kind: "Clear" } }),
-});
-
 const players = new Map<number, Player>();
 const playerColors = new Map<number, number>();
 let youId: number | null = null;
 
-const chatBucket = new TokenBucket(CHAT_BUCKET_CAPACITY, CHAT_BUCKET_REFILL_PER_SEC);
-
-const chat: ChatPanel = mountChat(chatEl, {
-  onSend: (text) => {
-    if (!chatBucket.tryTake()) return false;
-    conn.send({ kind: "Chat", text });
-    return true;
-  },
-});
+const gameState: GameState = emptyState();
 
 function nameOf(id: number, fallback = "anon"): string {
   return players.get(id)?.name ?? fallback;
@@ -96,18 +91,105 @@ function colorOf(id: number): number {
 function renderPlayers(): void {
   const items = Array.from(players.values()).map((p) => {
     const color = rgbToCss(colorOf(p.id));
+    const score = gameState.scores.get(p.id);
+    const scoreTag = score !== undefined ? ` <span class="players-score">${score}</span>` : "";
     const youTag = p.id === youId ? ' <span class="players-you">(you)</span>' : "";
-    return `<li><span class="swatch" style="background:${color}"></span>${escapeHtml(p.name)}${youTag}</li>`;
+    return `<li><span class="swatch" style="background:${color}"></span><span class="players-name">${escapeHtml(p.name)}</span>${youTag}${scoreTag}</li>`;
   });
   playersEl.innerHTML = `<h2>Room ${room}</h2><ul>${items.join("")}</ul>`;
 }
 
+const chatBucket = new TokenBucket(CHAT_BUCKET_CAPACITY, CHAT_BUCKET_REFILL_PER_SEC);
+
+const chat: ChatPanel = mountChat(chatEl, {
+  onSend: (text) => {
+    if (!chatBucket.tryTake()) return false;
+    // During Drawing phase as a non-drawer, treat input as a guess. The
+    // server treats both as text; this is just routing semantic.
+    if (gameState.phase.kind === "Drawing" && gameState.phase.drawer !== youId) {
+      conn.send({ kind: "Guess", text });
+    } else {
+      conn.send({ kind: "Chat", text });
+    }
+    return true;
+  },
+});
+
+const gameUI = mountGameUI(overlayEl, {
+  onStart: (mode: GameMode) => conn.send({ kind: "Game", action: { kind: "Start", mode } }),
+  onPickWord: (index) =>
+    conn.send({ kind: "Game", action: { kind: "PickWord", index } }),
+  onRematch: () => {
+    // Returning to Lobby is purely client-side until the server is told
+    // to Start again. Show the mode picker.
+    gameState.phase = { kind: "Lobby" };
+    renderGameUI();
+  },
+});
+
+mountToolbar(toolbarEl, {
+  onColor: (rgb) => surface.setColor(rgb),
+  onTool: (tool) => surface.setWidth(tool.width),
+  onClear: () => conn.send({ kind: "Game", action: { kind: "Clear" } }),
+});
+
 renderPlayers();
+renderGameUI();
+startBannerTicker();
 
 const wsUrl = (() => {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${proto}//${window.location.host}/ws/${room}`;
 })();
+
+function renderGameUI(): void {
+  gameUI.render(gameState.phase, youId, (id) => nameOf(id));
+  updateBanner();
+}
+
+function updateBanner(): void {
+  const phase = gameState.phase;
+  if (phase.kind !== "Drawing" && phase.kind !== "ChoosingWord") {
+    bannerEl.classList.add("banner--hidden");
+    return;
+  }
+  bannerEl.classList.remove("banner--hidden");
+  const text = gameUI.bannerText(phase) ?? "";
+  const round =
+    phase.kind === "Drawing" || phase.kind === "ChoosingWord"
+      ? `Round ${phase.roundIndex + 1}/${phase.totalRounds}`
+      : "";
+  bannerEl.innerHTML = `
+    <div class="banner-round">${escapeHtml(round)}</div>
+    <div class="banner-mask">${escapeHtml(text)}</div>
+    <div class="banner-timer" id="bannerTimer">--</div>
+  `;
+}
+
+function startBannerTicker(): void {
+  function tick(): void {
+    const timerEl = document.getElementById("bannerTimer");
+    const phase = gameState.phase;
+    if (timerEl) {
+      const deadline =
+        phase.kind === "Drawing" || phase.kind === "ChoosingWord"
+          ? phase.deadline
+          : null;
+      if (deadline !== null) {
+        const ms = Math.max(0, deadline - performance.now());
+        const secs = Math.ceil(ms / 1000);
+        timerEl.textContent = `${secs}s`;
+        if (secs <= 10) {
+          timerEl.classList.add("banner-timer--low");
+        } else {
+          timerEl.classList.remove("banner-timer--low");
+        }
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
 
 function handleMessage(msg: ServerMsg): void {
   switch (msg.kind) {
@@ -119,11 +201,11 @@ function handleMessage(msg: ServerMsg): void {
       for (const p of msg.snapshot.players) players.set(p.id, p);
       players.set(msg.you, { id: msg.you, name });
       for (const s of msg.snapshot.completed) playerColors.set(s.player, s.color);
+      gameState.phase = { kind: "Lobby" };
+      gameState.scores.clear();
       renderPlayers();
       surface.applySnapshot(msg);
       chat.clear();
-      // Replay chat history (capped server-side at the chat ring size) so
-      // joiners and reloads see what was said before.
       for (const line of msg.snapshot.chat) {
         chat.appendMessage(
           nameOf(line.player),
@@ -133,6 +215,7 @@ function handleMessage(msg: ServerMsg): void {
         );
       }
       chat.appendSystem(`joined room ${room}`);
+      renderGameUI();
       return;
     }
     case "Presence": {
@@ -183,13 +266,89 @@ function handleMessage(msg: ServerMsg): void {
       chat.appendSystem(`disconnected: ${msg.reason.toLowerCase()}`);
       return;
     case "Game":
-      if (msg.event.kind === "Cleared") {
-        surface.clear();
-        const who = nameOf(msg.event.by);
-        chat.appendSystem(`${who} cleared the canvas`);
+      handleGameEvent(msg.event);
+      return;
+    case "WordOptions": {
+      // Drawer only.
+      if (gameState.phase.kind === "ChoosingWord") {
+        gameState.phase = { ...gameState.phase, myOptions: msg.words };
+        renderGameUI();
       }
       return;
+    }
+    case "DrawerWord": {
+      if (gameState.phase.kind === "Drawing") {
+        gameState.phase = { ...gameState.phase, myWord: msg.word };
+        renderGameUI();
+      }
+      return;
+    }
     case "Ping":
+      return;
+  }
+}
+
+function handleGameEvent(event: Extract<ServerMsg, { kind: "Game" }>["event"]): void {
+  switch (event.kind) {
+    case "Cleared":
+      surface.clear();
+      chat.appendSystem(`${nameOf(event.by)} cleared the canvas`);
+      return;
+    case "WordPickStarted": {
+      const deadline = performance.now() + event.deadline_ms;
+      gameState.phase = {
+        kind: "ChoosingWord",
+        drawer: event.drawer,
+        deadline,
+        roundIndex: event.round_index,
+        totalRounds: event.total_rounds,
+      };
+      surface.clear();
+      chat.appendSystem(
+        `Round ${event.round_index + 1}/${event.total_rounds}: ${nameOf(event.drawer)} is picking a word`,
+      );
+      renderGameUI();
+      return;
+    }
+    case "RoundStart": {
+      const deadline = performance.now() + event.duration_ms;
+      gameState.phase = {
+        kind: "Drawing",
+        drawer: event.drawer,
+        mask: event.word_mask,
+        deadline,
+        durationMs: event.duration_ms,
+        roundIndex: event.round_index,
+        totalRounds: event.total_rounds,
+      };
+      renderGameUI();
+      return;
+    }
+    case "HintReveal":
+      if (gameState.phase.kind === "Drawing") {
+        gameState.phase = { ...gameState.phase, mask: event.mask };
+        renderGameUI();
+      }
+      return;
+    case "RoundEnd":
+      applyScores(gameState, event.scores);
+      gameState.phase = {
+        kind: "RoundEnd",
+        word: event.word,
+        scores: event.scores,
+      };
+      chat.appendSystem(`Word was "${event.word}"`);
+      renderPlayers();
+      renderGameUI();
+      return;
+    case "GameOver":
+      applyScores(gameState, event.final_scores);
+      gameState.phase = {
+        kind: "GameOver",
+        finalScores: event.final_scores,
+      };
+      renderPlayers();
+      renderGameUI();
       return;
   }
 }
@@ -219,3 +378,7 @@ const conn = new Conn({
 });
 
 surface.attachSender((msg) => conn.send(msg));
+
+// Avoid an unused-import lint when game.ts re-exports types we only use as
+// types at call sites.
+void (null as unknown as GamePhase);
