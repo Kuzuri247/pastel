@@ -5,11 +5,14 @@
 //! against a port-zero listener.
 
 pub mod rooms;
+pub mod words;
 pub mod ws;
 
 use axum::extract::State;
 use axum::routing::get;
 use axum::Router;
+use pastel_room::WordLists;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -17,16 +20,14 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new() -> Self {
+    pub fn new(words: Arc<WordLists>) -> Self {
         Self {
-            rooms: rooms::Rooms::new(),
+            rooms: rooms::Rooms::new(words),
         }
     }
-}
 
-impl Default for AppState {
-    fn default() -> Self {
-        Self::new()
+    pub fn with_test_words() -> Self {
+        Self::new(Arc::new(WordLists::test_fixture()))
     }
 }
 

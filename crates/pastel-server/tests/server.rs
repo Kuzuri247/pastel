@@ -12,7 +12,7 @@ type Client = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 const RECV_TIMEOUT: Duration = Duration::from_millis(500);
 
 async fn spawn_server() -> SocketAddr {
-    let app = build_router(AppState::new());
+    let app = build_router(AppState::with_test_words());
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
