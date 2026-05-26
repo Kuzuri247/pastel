@@ -90,6 +90,8 @@ pub struct CompletedStroke {
     pub player: PlayerId,
     pub stroke_id: u32,
     pub origin: (u16, u16),
+    pub color: u32,
+    pub width: u8,
     pub points: Vec<Point>,
 }
 

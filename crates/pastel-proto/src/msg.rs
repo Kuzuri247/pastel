@@ -13,6 +13,7 @@ pub enum GameAction {
     Start,
     PickWord(u8),
     Kick(PlayerId),
+    Clear,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -28,6 +29,9 @@ pub enum GameEvent {
     },
     GameOver {
         final_scores: Vec<(PlayerId, u32)>,
+    },
+    Cleared {
+        by: PlayerId,
     },
 }
 
@@ -52,6 +56,8 @@ pub enum ClientMsg {
     Stroke {
         stroke_id: u32,
         origin: (u16, u16),
+        color: u32,
+        width: u8,
         points: Vec<Point>,
         finished: bool,
     },
@@ -83,6 +89,8 @@ pub enum ServerMsg {
         player: PlayerId,
         stroke_id: u32,
         origin: (u16, u16),
+        color: u32,
+        width: u8,
         points: Vec<Point>,
         finished: bool,
     },

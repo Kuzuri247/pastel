@@ -120,6 +120,7 @@ pub fn validate_server(msg: &ServerMsg, depth: u8) -> Result<(), CodecError> {
                     MAX_PLAYERS_PER_ROOM,
                 )?;
             }
+            crate::msg::GameEvent::Cleared { .. } => {}
         },
         ServerMsg::Guess { .. } | ServerMsg::Ping { .. } | ServerMsg::Bye { .. } => {}
     }
