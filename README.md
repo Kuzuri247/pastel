@@ -242,10 +242,10 @@ Postgres, no Redis, no message queue. Word lists are 1500 lines of
 plain text in `crates/pastel-server/data/`, loaded once at startup.
 Configuration via env vars (`PASTEL_WORDS_DIR`, `RUST_LOG`).
 
-A future Phase 8 introduces Redis for cross-restart snapshot durability
-and rate-limit token buckets shared across multiple server nodes. Until
-the demand exists, the simplicity of "one process owns everything"
-wins.
+Redis (for cross-restart snapshot durability and rate-limit buckets
+shared across nodes) and a rendezvous-hashing gateway (for horizontal
+scale-out) are sketched out and easy to bolt on. Until the demand
+exists, the simplicity of "one process owns everything" wins.
 
 ## Repo layout
 
@@ -400,7 +400,7 @@ Honesty section.
 - **It's all localhost.** No WAN latency, no jitter, no NAT
   rebinding, no TLS handshake overhead.
 
-These are next-phase concerns. The point of the existing numbers is to
+These are follow-up concerns. The point of the existing numbers is to
 prove the **architecture** isn't the bottleneck. When real-network
 results disappoint, the cause will be one of: TCP/TLS overhead, geo-
 distance, or per-connection memory at scale. Not the room actor.
@@ -430,25 +430,16 @@ runs `cargo fmt --check` on any commit that touches `.rs` files.
 | clippy | `cargo clippy --workspace --all-targets -- -D warnings`  |
 | test   | `cargo test --workspace --all-targets`                   |
 
-All three must pass to merge. Frontend CI is on the to-do list, behind
-hooking up `npm test` and `tsc --noEmit` as a fourth job.
+All three must pass to merge.
 
-## Roadmap
+`.github/workflows/frontend.yml` mirrors the same shape for the
+frontend, path-filtered to `frontend/**`:
 
-Done: protocol, room actor, single-node server, web client with
-smoothing + reconnect, chat, solo game loop, landing page, host
-concept, load test.
-
-Next:
-
-1. **Team mode.** 2+ teams in a room, members draw together, opposite
-   team guesses. The differentiator from Skribbl.
-2. **Voice.** Self-hosted LiveKit, one room per team. Token-minting in
-   the room actor, eviction on disconnect.
-3. **Redis.** Snapshot durability across restarts, rate-limit buckets
-   shared across nodes, prep for horizontal scale.
-4. **Gateway + multi-node** via rendezvous hashing, for 10k+ concurrent
-   users.
+| Job        | Command                          |
+|------------|----------------------------------|
+| typecheck  | `npm run typecheck`              |
+| test       | `npm test`                       |
+| build      | `npm run build`                  |
 
 ## Wire protocol, briefly
 
