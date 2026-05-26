@@ -311,89 +311,121 @@ async fn run_client(
         }
     };
 
-    let mut send_times: HashMap<u32, Instant> = HashMap::new();
-    let mut local_hist = Histogram::<u64>::new(3).expect("histogram");
+    let send_times: Arc<std::sync::Mutex<HashMap<u32, Instant>>> =
+        Arc::new(std::sync::Mutex::new(HashMap::new()));
+    let local_hist: Arc<std::sync::Mutex<Histogram<u64>>> = Arc::new(std::sync::Mutex::new(
+        Histogram::<u64>::new(3).expect("histogram"),
+    ));
     let started = Instant::now();
-    let mut next_send = started;
-    let mut stroke_id: u32 = 1;
     let stop_at = started + duration;
-    let mut stop_recv_at: Option<Instant> = None;
+    let drain_for = Duration::from_millis(500);
 
-    loop {
-        let send_due = next_send.checked_duration_since(Instant::now()).is_none();
-        let now = Instant::now();
-        let want_send = now < stop_at && (send_due || next_send <= now);
-
-        if let Some(end) = stop_recv_at {
-            if now >= end {
-                break;
-            }
-        }
-
-        tokio::select! {
-            // Fair, NOT biased: with biased, the stream arm dominates because
-            // broadcasts keep arriving, and the send branch never gets to run.
-            msg = stream.next() => {
-                let frame = match msg {
-                    Some(Ok(f)) => f,
-                    Some(Err(_)) => {
-                        shared.stats.ws_errors.fetch_add(1, Ordering::Relaxed);
-                        break;
-                    }
-                    None => break,
-                };
-                if let Message::Binary(bytes) = frame {
-                    match decode::<ServerMsg>(&bytes) {
-                        Ok(ServerMsg::Stroke { player, stroke_id: sid, .. }) => {
-                            if player == you_id {
-                                if let Some(t) = send_times.remove(&sid) {
-                                    let dt = t.elapsed().as_micros() as u64;
-                                    let _ = local_hist.record(dt);
-                                    shared.stats.received_self.fetch_add(1, Ordering::Relaxed);
-                                }
-                            } else {
-                                shared.stats.received_other.fetch_add(1, Ordering::Relaxed);
-                            }
-                        }
-                        Ok(_) => {}
-                        Err(_) => {
-                            shared.stats.bad_frames.fetch_add(1, Ordering::Relaxed);
-                            break;
-                        }
-                    }
+    // Two-phase run with an outer hard deadline: steady-state send+recv until
+    // stop_at, then drain for a fixed window. Even if the stream goes silent
+    // (everyone else stopped), the absolute timer breaks us out cleanly.
+    let outer = tokio::time::timeout(duration + drain_for + Duration::from_secs(2), async {
+        // -- steady state: send on an interval, drain recv concurrently --
+        let send_times_s = send_times.clone();
+        let local_hist_s = local_hist.clone();
+        let shared_s = shared.clone();
+        let send_task = tokio::spawn(async move {
+            let mut stroke_id: u32 = 1;
+            let mut tick = tokio::time::interval(send_interval);
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            while Instant::now() < stop_at {
+                tick.tick().await;
+                if Instant::now() >= stop_at {
+                    break;
                 }
-            }
-
-            _ = tokio::time::sleep_until(tokio::time::Instant::from_std(next_send)),
-                if want_send =>
-            {
-                send_times.insert(stroke_id, Instant::now());
+                send_times_s
+                    .lock()
+                    .unwrap()
+                    .insert(stroke_id, Instant::now());
                 let msg = ClientMsg::Stroke {
                     stroke_id,
                     origin: (100, 100),
                     color: 0x000000,
                     width: 4,
-                    points: vec![Point { dx: 1, dy: 1, dt: 16, pressure: 0 }],
+                    points: vec![Point {
+                        dx: 1,
+                        dy: 1,
+                        dt: 16,
+                        pressure: 0,
+                    }],
                     finished: false,
                 };
-                if sink.send(Message::Binary(encode(&msg).unwrap())).await.is_err() {
-                    shared.stats.ws_errors.fetch_add(1, Ordering::Relaxed);
-                    break;
+                let bytes = encode(&msg).unwrap();
+                if sink.send(Message::Binary(bytes)).await.is_err() {
+                    shared_s.stats.ws_errors.fetch_add(1, Ordering::Relaxed);
+                    return;
                 }
-                shared.stats.sent.fetch_add(1, Ordering::Relaxed);
+                shared_s.stats.sent.fetch_add(1, Ordering::Relaxed);
                 stroke_id = stroke_id.wrapping_add(1);
-                next_send = now + send_interval;
+            }
+            let _ = local_hist_s;
+        });
 
-                // Once we've sent everything we plan to, give the server a
-                // bit to echo before we tear the connection down.
-                if next_send >= stop_at && stop_recv_at.is_none() {
-                    stop_recv_at = Some(now + Duration::from_millis(500));
+        let recv_send_times = send_times.clone();
+        let recv_local_hist = local_hist.clone();
+        let recv_shared = shared.clone();
+        let recv_task = tokio::spawn(async move {
+            while let Some(frame) = stream.next().await {
+                let bytes = match frame {
+                    Ok(Message::Binary(b)) => b,
+                    Ok(_) => continue,
+                    Err(_) => {
+                        recv_shared.stats.ws_errors.fetch_add(1, Ordering::Relaxed);
+                        return;
+                    }
+                };
+                match decode::<ServerMsg>(&bytes) {
+                    Ok(ServerMsg::Stroke {
+                        player,
+                        stroke_id: sid,
+                        ..
+                    }) => {
+                        if player == you_id {
+                            let at = recv_send_times.lock().unwrap().remove(&sid);
+                            if let Some(t) = at {
+                                let dt = t.elapsed().as_micros() as u64;
+                                let _ = recv_local_hist.lock().unwrap().record(dt);
+                                recv_shared
+                                    .stats
+                                    .received_self
+                                    .fetch_add(1, Ordering::Relaxed);
+                            }
+                        } else {
+                            recv_shared
+                                .stats
+                                .received_other
+                                .fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(_) => {
+                        recv_shared.stats.bad_frames.fetch_add(1, Ordering::Relaxed);
+                        return;
+                    }
                 }
             }
-        }
+        });
+
+        let _ = send_task.await;
+        // Drain phase: read more echoes for a bounded window, then
+        // cancel the receiver. The outer timeout above is the safety
+        // net if the abort doesn't take.
+        tokio::time::sleep(drain_for).await;
+        recv_task.abort();
+        let _ = recv_task.await;
+    })
+    .await;
+    if outer.is_err() {
+        // Client overran the safety net; not fatal, just note it.
+        shared.stats.ws_errors.fetch_add(1, Ordering::Relaxed);
     }
 
     let mut global = shared.global_hist.lock().await;
-    let _ = global.add(&local_hist);
+    let local = local_hist.lock().unwrap();
+    let _ = global.add(&*local);
     Ok(())
 }
