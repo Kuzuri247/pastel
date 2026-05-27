@@ -60,12 +60,13 @@ export function isDrawer(state: GameState, you: number | null): boolean {
 export interface ModeOption {
   id: GameMode;
   label: string;
+  desc: string;
   rounds: number;
   wordChoices: number;
 }
 
 export const MODE_OPTIONS: ModeOption[] = [
-  { id: "Sprint", label: "Sprint", rounds: 3, wordChoices: 7 },
-  { id: "Standard", label: "Standard", rounds: 5, wordChoices: 5 },
-  { id: "Marathon", label: "Marathon", rounds: 7, wordChoices: 3 },
+  { id: "Sprint", label: "Sprint", desc: "Quick and chaotic", rounds: 3, wordChoices: 7 },
+  { id: "Standard", label: "Standard", desc: "Just right for most groups", rounds: 5, wordChoices: 5 },
+  { id: "Marathon", label: "Marathon", desc: "Long night? This one's for you", rounds: 7, wordChoices: 3 },
 ];
