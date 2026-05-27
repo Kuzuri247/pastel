@@ -18,10 +18,10 @@ export function showFatalScreen(reason: ByeReason): void {
         <p class="kicked-body">${escapeHtml(body)}</p>
         <div class="kicked-actions">
           <button type="button" class="kicked-primary" id="kickedHome">
-            Back to home
+            Back home
           </button>
           <button type="button" class="kicked-secondary" id="kickedRejoin">
-            Try the same room again
+            Try rejoining
           </button>
         </div>
       </section>
@@ -51,14 +51,14 @@ export function showJoinPendingScreen(): void {
   overlay.className = "kicked";
   overlay.innerHTML = `
     <section class="kicked-card">
-      <h1>Waiting for the host</h1>
+      <h1>Waiting on the host</h1>
       <p class="kicked-body">
-        You were kicked from this room earlier, so the host has to let you
-        back in. Hang tight.
+        You were removed from this room before, so the host needs to
+        let you back in. Sit tight!
       </p>
       <div class="kicked-actions">
         <button type="button" class="kicked-secondary" id="pendingHome">
-          Leave
+          Never mind, leave
         </button>
       </div>
     </section>
@@ -81,28 +81,28 @@ function copyFor(reason: ByeReason): { heading: string; body: string } {
   switch (reason) {
     case "Kicked":
       return {
-        heading: "You were kicked from the room",
-        body: "The host removed you. You can head back to the home screen, or try rejoining if it was a mistake.",
+        heading: "You've been removed",
+        body: "The host decided to remove you. If that was an accident, you can try rejoining.",
       };
     case "RoomFull":
       return {
-        heading: "That room is full",
-        body: "Rooms cap at 10 players. Create a new one or try again later.",
+        heading: "Room's full!",
+        body: "This room already has 10 players. Try starting your own, or check back in a bit.",
       };
     case "RoomClosed":
       return {
-        heading: "Room closed",
-        body: "The room is no longer accepting connections.",
+        heading: "This room is gone",
+        body: "The host closed the room. Time to start a new one?",
       };
     case "BadFrame":
       return {
-        heading: "Connection rejected",
-        body: "The server didn't accept our handshake. This usually means the client is out of date. Try reloading.",
+        heading: "Something went wrong",
+        body: "We couldn't connect properly. A quick reload usually fixes this.",
       };
     case "Reconnect":
       return {
-        heading: "Disconnected",
-        body: "You were dropped from the room. Reload to rejoin.",
+        heading: "You got disconnected",
+        body: "Lost the connection. Reload to hop back in.",
       };
   }
 }
