@@ -1,5 +1,6 @@
 use crate::limits::*;
 use crate::msg::{ClientMsg, ServerMsg};
+use crate::types::Avatar;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]
@@ -13,6 +14,12 @@ pub enum CodecError {
         field: &'static str,
         len: usize,
         max: usize,
+    },
+    #[error("avatar.{field}={value} exceeds limit {max}")]
+    AvatarPartOutOfRange {
+        field: &'static str,
+        value: u8,
+        max: u8,
     },
     #[error("resume events nested too deep")]
     ResumeTooDeep,
@@ -48,6 +55,7 @@ pub fn validate_client(msg: &ClientMsg) -> Result<(), CodecError> {
             if let Some(t) = &h.client_token {
                 check_len("hello.client_token", t.len(), MAX_CLIENT_TOKEN_LEN)?;
             }
+            validate_avatar(&h.avatar)?;
         }
         ClientMsg::Stroke { points, .. } => {
             check_len("stroke.points", points.len(), MAX_POINTS_PER_BATCH)?;
@@ -81,6 +89,9 @@ pub fn validate_server(msg: &ServerMsg, depth: u8) -> Result<(), CodecError> {
                 MAX_PLAYERS_PER_ROOM,
             )?;
             check_len("welcome.lk_token", lk_token.len(), MAX_LK_TOKEN_LEN)?;
+            for p in &snapshot.players {
+                validate_avatar(&p.avatar)?;
+            }
             for s in &snapshot.completed {
                 check_len(
                     "completed_stroke.points",
@@ -115,6 +126,9 @@ pub fn validate_server(msg: &ServerMsg, depth: u8) -> Result<(), CodecError> {
         ServerMsg::Presence { joined, left, .. } => {
             check_len("presence.joined", joined.len(), MAX_PLAYERS_PER_ROOM)?;
             check_len("presence.left", left.len(), MAX_PLAYERS_PER_ROOM)?;
+            for p in joined {
+                validate_avatar(&p.avatar)?;
+            }
         }
         ServerMsg::Game { event, .. } => match event {
             crate::msg::GameEvent::RoundStart { word_mask, .. } => {
@@ -165,4 +179,23 @@ fn check_len(field: &'static str, len: usize, max: usize) -> Result<(), CodecErr
     } else {
         Ok(())
     }
+}
+
+fn check_part(field: &'static str, value: u8, max: u8) -> Result<(), CodecError> {
+    if value > max {
+        Err(CodecError::AvatarPartOutOfRange { field, value, max })
+    } else {
+        Ok(())
+    }
+}
+
+pub fn validate_avatar(a: &Avatar) -> Result<(), CodecError> {
+    check_part("skin", a.skin, AVATAR_MAX_SKIN)?;
+    check_part("hat", a.hat, AVATAR_MAX_HAT)?;
+    check_part("hair", a.hair, AVATAR_MAX_HAIR)?;
+    check_part("eyes", a.eyes, AVATAR_MAX_EYES)?;
+    check_part("mouth", a.mouth, AVATAR_MAX_MOUTH)?;
+    check_part("specs", a.specs, AVATAR_MAX_SPECS)?;
+    check_part("earrings", a.earrings, AVATAR_MAX_EARRINGS)?;
+    Ok(())
 }

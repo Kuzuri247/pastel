@@ -35,8 +35,33 @@ fn arb_points(max: usize) -> impl Strategy<Value = Vec<Point>> {
     vec(arb_point(), SizeRange::from(0..=max))
 }
 
+fn arb_avatar() -> impl Strategy<Value = Avatar> {
+    (
+        0u8..=AVATAR_MAX_SKIN,
+        0u8..=AVATAR_MAX_HAT,
+        0u8..=AVATAR_MAX_HAIR,
+        0u8..=AVATAR_MAX_EYES,
+        0u8..=AVATAR_MAX_MOUTH,
+        0u8..=AVATAR_MAX_SPECS,
+        0u8..=AVATAR_MAX_EARRINGS,
+    )
+        .prop_map(|(skin, hat, hair, eyes, mouth, specs, earrings)| Avatar {
+            skin,
+            hat,
+            hair,
+            eyes,
+            mouth,
+            specs,
+            earrings,
+        })
+}
+
 fn arb_player() -> impl Strategy<Value = Player> {
-    (any::<u32>(), arb_name()).prop_map(|(id, name)| Player { id, name })
+    (any::<u32>(), arb_name(), arb_avatar()).prop_map(|(id, name, avatar)| Player {
+        id,
+        name,
+        avatar,
+    })
 }
 
 // Realistic, not pathological. These bounds keep every generated message
@@ -148,12 +173,14 @@ fn arb_hello() -> impl Strategy<Value = Hello> {
         arb_name(),
         proptest::option::of(any::<u64>()),
         proptest::option::of(arb_text(MAX_CLIENT_TOKEN_LEN)),
+        arb_avatar(),
     )
-        .prop_map(|(room, name, resume_from, client_token)| Hello {
+        .prop_map(|(room, name, resume_from, client_token, avatar)| Hello {
             room,
             name,
             resume_from,
             client_token,
+            avatar,
         })
 }
 
@@ -408,10 +435,31 @@ fn validation_rejects_oversize_name() {
         name: "a".repeat(MAX_NAME_LEN + 1),
         resume_from: None,
         client_token: None,
+        avatar: Avatar::default(),
     });
     let bytes = encode(&msg).unwrap();
     let err = decode_client_validated(&bytes).unwrap_err();
     assert!(matches!(err, CodecError::FieldTooLong { field, .. } if field == "hello.name"));
+}
+
+#[test]
+fn validation_rejects_avatar_out_of_range() {
+    let msg = ClientMsg::Hello(Hello {
+        room: RoomCode::parse("ABC234").unwrap(),
+        name: "alice".into(),
+        resume_from: None,
+        client_token: None,
+        avatar: Avatar {
+            skin: AVATAR_MAX_SKIN + 1,
+            ..Avatar::default()
+        },
+    });
+    let bytes = encode(&msg).unwrap();
+    let err = decode_client_validated(&bytes).unwrap_err();
+    assert!(matches!(
+        err,
+        CodecError::AvatarPartOutOfRange { field: "skin", .. }
+    ));
 }
 
 #[test]

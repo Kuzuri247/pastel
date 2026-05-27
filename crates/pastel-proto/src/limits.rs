@@ -17,3 +17,14 @@ pub const MAX_RESUME_EVENTS: usize = 1024;
 pub const MAX_LK_TOKEN_LEN: usize = 1024;
 
 pub const MAX_FRAME_BYTES: usize = 64 * 1024;
+
+/// Per-field upper bounds on `Avatar` part IDs. These match the part counts in
+/// the frontend's parts table; the codec rejects out-of-range bytes so a
+/// hostile client can't crash the renderer with an unknown index.
+pub const AVATAR_MAX_SKIN: u8 = 6;
+pub const AVATAR_MAX_HAT: u8 = 5;
+pub const AVATAR_MAX_HAIR: u8 = 7;
+pub const AVATAR_MAX_EYES: u8 = 7;
+pub const AVATAR_MAX_MOUTH: u8 = 6;
+pub const AVATAR_MAX_SPECS: u8 = 4;
+pub const AVATAR_MAX_EARRINGS: u8 = 4;

@@ -1,4 +1,4 @@
-use crate::types::{GameMode, Player, PlayerId, Point, RoomCode, RoomSnapshot, Seq};
+use crate::types::{Avatar, GameMode, Player, PlayerId, Point, RoomCode, RoomSnapshot, Seq};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -10,6 +10,7 @@ pub struct Hello {
     /// player coming back, so the server can gate them behind host approval
     /// instead of admitting them silently. Optional for backwards-compat.
     pub client_token: Option<String>,
+    pub avatar: Avatar,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

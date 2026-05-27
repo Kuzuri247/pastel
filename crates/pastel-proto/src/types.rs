@@ -104,10 +104,25 @@ pub struct Point {
     pub pressure: u8,
 }
 
+/// Compact per-player avatar. Each field is an index into a client-side parts
+/// table; the server treats them as opaque bytes. Ranges are validated in
+/// `codec::validate_*` so a malicious client can't pin a renderer.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct Avatar {
+    pub skin: u8,
+    pub hat: u8,
+    pub hair: u8,
+    pub eyes: u8,
+    pub mouth: u8,
+    pub specs: u8,
+    pub earrings: u8,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Player {
     pub id: PlayerId,
     pub name: String,
+    pub avatar: Avatar,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
