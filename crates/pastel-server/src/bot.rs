@@ -341,21 +341,22 @@ async fn run_bot(
                     let guess = guess_candidates[guess_index].clone();
                     guess_index += 1;
                     room.send(my_id, ClientMsg::Guess { text: guess }).await;
-                    let pause = match diff {
-                        BotDifficulty::Easy => rand::thread_rng().gen_range(4000..7000),
-                        BotDifficulty::Medium => rand::thread_rng().gen_range(2000..4000),
-                        BotDifficulty::Hard => rand::thread_rng().gen_range(800..1500),
+                    // Pause grows slightly each attempt so it doesn't feel robotic
+                    let attempt = guess_index as u64;
+                    let (base_lo, base_hi) = match diff {
+                        BotDifficulty::Easy => (5000u64, 9000u64),
+                        BotDifficulty::Medium => (3000, 5000),
+                        BotDifficulty::Hard => (1200, 2500),
                     };
-                    next_guess_at = Some(tokio::time::Instant::now() + Duration::from_millis(pause));
-                    let max_tries = match diff {
-                        BotDifficulty::Easy => 3,
-                        BotDifficulty::Medium => 6,
-                        BotDifficulty::Hard => 12,
-                    };
-                    if guess_index >= max_tries {
-                        guess_sent = true;
-                        next_guess_at = None;
-                    }
+                    let jitter = rand::thread_rng().gen_range(base_lo..base_hi);
+                    let slowdown = (attempt * 300).min(3000);
+                    next_guess_at = Some(
+                        tokio::time::Instant::now() + Duration::from_millis(jitter + slowdown),
+                    );
+                } else {
+                    // Exhausted all candidates, stop
+                    guess_sent = true;
+                    next_guess_at = None;
                 }
             }
         }
