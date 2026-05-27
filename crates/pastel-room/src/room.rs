@@ -124,11 +124,13 @@ struct PlayerSlot {
     chat_bucket: TokenBucket,
     guess_bucket: TokenBucket,
     client_token: Option<String>,
+    avatar: Avatar,
 }
 
 struct PendingJoiner {
     name: String,
     client_token: String,
+    avatar: Avatar,
     reply_tx: oneshot::Sender<ApprovalResult>,
 }
 
@@ -293,6 +295,7 @@ impl Room {
                 .map(|(id, slot)| Player {
                     id: *id,
                     name: slot.name.clone(),
+                    avatar: slot.avatar,
                 })
                 .collect(),
             completed: self.completed.iter().cloned().collect(),
@@ -384,6 +387,7 @@ impl Room {
                     PendingJoiner {
                         name: hello.name.clone(),
                         client_token: token.clone(),
+                        avatar: hello.avatar,
                         reply_tx: approval_tx,
                     },
                 );
@@ -403,7 +407,7 @@ impl Room {
             }
         }
 
-        let join = self.admit_player(id, hello.name, hello.client_token);
+        let join = self.admit_player(id, hello.name, hello.client_token, hello.avatar);
         let _ = reply.send(Ok(JoinOutcome::Joined(join)));
     }
 
@@ -415,6 +419,7 @@ impl Room {
         id: PlayerId,
         name: String,
         client_token: Option<String>,
+        avatar: Avatar,
     ) -> JoinResult {
         // First joiner becomes host. Host status only changes if the
         // current host has left (see handle_leave).
@@ -441,6 +446,7 @@ impl Room {
                 chat_bucket: TokenBucket::new(CHAT_BUCKET_CAPACITY, CHAT_REFILL_PER_SEC),
                 guess_bucket: TokenBucket::new(GUESS_BUCKET_CAPACITY, GUESS_REFILL_PER_SEC),
                 client_token,
+                avatar,
             },
         );
 
@@ -454,7 +460,7 @@ impl Room {
         let seq = self.next_seq();
         self.broadcast(ServerMsg::Presence {
             seq,
-            joined: vec![Player { id, name }],
+            joined: vec![Player { id, name, avatar }],
             left: vec![],
         });
 
@@ -485,7 +491,7 @@ impl Room {
         };
         // They're back in good standing; clear their kick mark.
         self.kicked_tokens.remove(&pj.client_token);
-        let join = self.admit_player(candidate, pj.name, Some(pj.client_token));
+        let join = self.admit_player(candidate, pj.name, Some(pj.client_token), pj.avatar);
         let _ = pj.reply_tx.send(ApprovalResult::Approved(join));
     }
 

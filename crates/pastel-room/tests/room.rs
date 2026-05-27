@@ -24,6 +24,7 @@ fn hello(name: &str) -> Hello {
         name: name.into(),
         resume_from: None,
         client_token: None,
+        avatar: Avatar::default(),
     }
 }
 
