@@ -4,12 +4,13 @@
 //! serves it on a TCP listener. Integration tests use the same `build_router`
 //! against a port-zero listener.
 
+pub mod bot;
 pub mod rooms;
 pub mod words;
 pub mod ws;
 
 use axum::extract::State;
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 use pastel_room::WordLists;
 use std::sync::Arc;
@@ -36,6 +37,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/healthz", get(healthz))
         .route("/metrics", get(metrics))
         .route("/ws/:code", get(ws::ws_handler))
+        .route("/bot/:code", post(bot::add_bot))
         .with_state(state)
 }
 

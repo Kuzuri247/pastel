@@ -21,6 +21,8 @@ dashmap = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 tokio-tungstenite = { workspace = true }

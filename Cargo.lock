@@ -966,6 +966,7 @@ dependencies = [
  "futures-util",
  "hdrhistogram",
  "pastel-proto",
+ "rand 0.8.6",
  "tokio",
  "tokio-tungstenite 0.21.0",
 ]
@@ -1004,6 +1005,8 @@ dependencies = [
  "futures-util",
  "pastel-proto",
  "pastel-room",
+ "rand 0.8.6",
+ "serde",
  "tokio",
  "tokio-tungstenite 0.21.0",
  "tracing",
