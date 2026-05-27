@@ -60,14 +60,14 @@ export function showRoundIntro(opts: RoundIntroOpts): void {
         <span class="round-intro-drawer-avatar">${opts.drawerAvatarHtml}</span>
         <div class="round-intro-drawer-text">
           <span class="round-intro-drawer-name">${escapeHtml(opts.drawerName)}</span>
-          <span class="round-intro-drawer-sub">is drawing</span>
+          <span class="round-intro-drawer-sub">is up to draw</span>
         </div>
       </div>
     </div>
     ${
       rows
         ? `<ol class="round-intro-scores">${rows}</ol>`
-        : '<div class="round-intro-empty">First round, no scores yet</div>'
+        : '<div class="round-intro-empty">First round. Let\'s see what you\'ve got!</div>'
     }
   `;
   host.appendChild(card);

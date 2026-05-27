@@ -36,20 +36,20 @@ export function pickNameAndAvatar(): Promise<PickedIdentity> {
     overlay.innerHTML = `
       <section class="picker-card">
         <header class="picker-head">
-          <h1>Make your avatar</h1>
-          <p class="picker-tag">You can change this later.</p>
+          <h1>Pick your look</h1>
+          <p class="picker-tag">Don't worry, you can tweak this anytime.</p>
         </header>
 
         <div class="picker-preview">
           <div class="picker-svg" id="pickerSvg"></div>
           <button type="button" class="picker-random" id="pickerRandom"
-                  title="Surprise me">Randomize</button>
+                  title="Surprise me">Surprise me</button>
         </div>
 
         <label class="field picker-name">
           <span class="field-label">Your name</span>
           <input id="pickerName" type="text" maxlength="32" autocomplete="off"
-                 placeholder="pick a name"
+                 placeholder="what should we call you?"
                  value="${escapeHtml(storedName)}" />
         </label>
 
@@ -65,7 +65,7 @@ export function pickNameAndAvatar(): Promise<PickedIdentity> {
         <div class="picker-options" id="pickerOptions"></div>
 
         <button type="button" class="picker-submit" id="pickerSubmit">
-          Looks good, join
+          Looking good! Join in
         </button>
       </section>
     `;
