@@ -1,17 +1,11 @@
 // Landing screen shown when the URL has no ?room param. Lets the host pick
-// a name and a mode before generating a room code, or join an existing room
-// by code.
+// a mode before generating a room code, or join an existing room by code.
+// Name + avatar are collected by the picker once the user lands in a room.
 
 import { MODE_OPTIONS } from "./game";
 import { parseRoomCode, type GameMode } from "./proto";
 
-const STORAGE_NAME = "pastel.name";
 const STORAGE_MODE = "pastel.mode";
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
-}
 
 function randomCode(): string {
   const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -23,7 +17,6 @@ function randomCode(): string {
 }
 
 export function showLanding(): void {
-  const storedName = window.localStorage.getItem(STORAGE_NAME) ?? "";
   const storedMode =
     (window.localStorage.getItem(STORAGE_MODE) as GameMode | null) ?? "Standard";
 
@@ -34,13 +27,6 @@ export function showLanding(): void {
         <p class="landing-tag">Draw with friends. No accounts.</p>
 
         <form class="landing-form" id="landingForm">
-          <label class="field">
-            <span class="field-label">Your name</span>
-            <input id="landingName" type="text" maxlength="32" required
-                   value="${escapeHtml(storedName)}" autocomplete="off"
-                   placeholder="pick a name" />
-          </label>
-
           <fieldset class="modes">
             <legend>Mode</legend>
             ${MODE_OPTIONS.map(
@@ -72,7 +58,6 @@ export function showLanding(): void {
     </main>
   `;
 
-  const nameInput = document.getElementById("landingName") as HTMLInputElement;
   const codeInput = document.getElementById("landingCode") as HTMLInputElement;
   const createForm = document.getElementById("landingForm") as HTMLFormElement;
   const joinForm = document.getElementById("landingJoin") as HTMLFormElement;
@@ -89,10 +74,8 @@ export function showLanding(): void {
 
   createForm.addEventListener("submit", (e) => {
     e.preventDefault();
-    const name = nameInput.value.trim().slice(0, 32) || "anon";
     const mode =
       (new FormData(createForm).get("mode") as GameMode | null) ?? "Standard";
-    window.localStorage.setItem(STORAGE_NAME, name);
     window.localStorage.setItem(STORAGE_MODE, mode);
     const code = randomCode();
     const url = new URL(window.location.href);
@@ -104,8 +87,6 @@ export function showLanding(): void {
 
   joinForm.addEventListener("submit", (e) => {
     e.preventDefault();
-    const name = nameInput.value.trim().slice(0, 32) || "anon";
-    window.localStorage.setItem(STORAGE_NAME, name);
     const raw = codeInput.value.trim();
     let code: string;
     try {
