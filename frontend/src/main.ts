@@ -298,6 +298,12 @@ const gameUI = mountGameUI(overlayEl, {
     gameState.phase = { kind: "Lobby" };
     renderGameUI();
   },
+  onAddBot: (difficulty) => {
+    fetch(`/bot/${room}?difficulty=${difficulty}`, { method: "POST" })
+      .then((r) => r.text())
+      .then((name) => showToast(name, { kind: "success" }))
+      .catch(() => showToast("Couldn't add bot", { kind: "error" }));
+  },
 });
 
 mountToolbar(toolbarEl, {

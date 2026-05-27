@@ -477,6 +477,33 @@ canvas {
 .lobby-invite {
   margin-top: 12px;
   text-align: center;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.lobby-bot-group {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.lobby-bot {
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--muted);
+  padding: 5px 10px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 120ms ease-out, border-color 120ms ease-out;
+}
+
+.lobby-bot:hover {
+  color: var(--ink);
+  border-color: var(--ink);
 }
 
 .word-pick-head {

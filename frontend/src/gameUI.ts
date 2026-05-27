@@ -7,6 +7,7 @@ export interface GameUIHandlers {
   onStart: () => void;
   onPickWord: (index: number) => void;
   onRematch: () => void;
+  onAddBot: (difficulty: string) => void;
 }
 
 export interface RenderContext {
@@ -76,12 +77,22 @@ export function mountGameUI(root: HTMLElement, handlers: GameUIHandlers): GameUI
         </div>
         <div class="lobby-invite">
           <button type="button" class="invite-secondary">Share invite link</button>
+          ${isHost ? `<span class="lobby-bot-group">
+            <button type="button" class="lobby-bot" data-diff="easy">+ chill bot</button>
+            <button type="button" class="lobby-bot" data-diff="medium">+ normal bot</button>
+            <button type="button" class="lobby-bot" data-diff="hard">+ sweaty bot</button>
+          </span>` : ""}
         </div>
       </div>
     `;
     root
       .querySelector<HTMLButtonElement>(".lobby-start")
       ?.addEventListener("click", () => handlers.onStart());
+    for (const btn of root.querySelectorAll<HTMLButtonElement>(".lobby-bot")) {
+      btn.addEventListener("click", () => {
+        handlers.onAddBot(btn.dataset.diff ?? "medium");
+      });
+    }
     wireInvite(ctx);
   }
 
