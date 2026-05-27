@@ -109,9 +109,10 @@ export function mountGameUI(root: HTMLElement, handlers: GameUIHandlers): GameUI
 
   function renderChoosing(
     phase: Extract<GamePhase, { kind: "ChoosingWord" }>,
-    you: number | null,
-    nameOf: (id: number) => string,
+    ctx: RenderContext,
   ): void {
+    const you = ctx.you;
+    const nameOf = ctx.nameOf;
     visible();
     if (phase.drawer === you && phase.myOptions) {
       const cards = phase.myOptions
@@ -131,6 +132,7 @@ export function mountGameUI(root: HTMLElement, handlers: GameUIHandlers): GameUI
           </div>
           <div class="word-pick-grid">${cards}</div>
           <p class="overlay-hint">Auto-picks the first if you take too long.</p>
+          <button type="button" class="invite-secondary">Copy invite link</button>
         </div>
       `;
       for (const btn of root.querySelectorAll<HTMLButtonElement>(".word-pick-card")) {
@@ -147,9 +149,11 @@ export function mountGameUI(root: HTMLElement, handlers: GameUIHandlers): GameUI
             <h2>${escapeHtml(nameOf(phase.drawer))} is picking a word</h2>
           </div>
           <p class="overlay-hint">Hang tight.</p>
+          <button type="button" class="invite-secondary">Copy invite link</button>
         </div>
       `;
     }
+    wireInvite(ctx);
   }
 
   function renderRoundEnd(
@@ -173,7 +177,7 @@ export function mountGameUI(root: HTMLElement, handlers: GameUIHandlers): GameUI
 
   function renderGameOver(
     phase: Extract<GamePhase, { kind: "GameOver" }>,
-    nameOf: (id: number) => string,
+    ctx: RenderContext,
   ): void {
     visible();
     const top = phase.finalScores.slice(0, 3);
@@ -182,14 +186,22 @@ export function mountGameUI(root: HTMLElement, handlers: GameUIHandlers): GameUI
         ([id, score], i) =>
           `<li class="podium-row podium-${i + 1}">
              <span class="podium-rank">#${i + 1}</span>
-             <span class="podium-name">${escapeHtml(nameOf(id))}</span>
+             <span class="podium-name">${escapeHtml(ctx.nameOf(id))}</span>
              <span class="podium-score">${score}</span>
            </li>`,
       )
       .join("");
+    // If the game ended because everyone else bailed, say so plainly. The
+    // server doesn't send a reason, but we can infer from the room state.
+    const abandoned = ctx.playerCount < 2;
+    const heading = abandoned ? "No one left to play with" : "Game over";
+    const subtext = abandoned
+      ? '<p class="overlay-hint">Everyone else left the room. Here are the points so far.</p>'
+      : "";
     root.innerHTML = `
       <div class="overlay-card">
-        <h2>Game over</h2>
+        <h2>${heading}</h2>
+        ${subtext}
         <ul class="podium">${podium}</ul>
         <button type="button" class="rematch-btn">Play again</button>
       </div>
@@ -205,13 +217,13 @@ export function mountGameUI(root: HTMLElement, handlers: GameUIHandlers): GameUI
         renderLobby(ctx);
         break;
       case "ChoosingWord":
-        renderChoosing(phase, ctx.you, ctx.nameOf);
+        renderChoosing(phase, ctx);
         break;
       case "RoundEnd":
         renderRoundEnd(phase, ctx.nameOf);
         break;
       case "GameOver":
-        renderGameOver(phase, ctx.nameOf);
+        renderGameOver(phase, ctx);
         break;
       case "Drawing":
         clear();
