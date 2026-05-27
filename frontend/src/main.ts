@@ -15,7 +15,6 @@ import {
   showJoinPendingScreen,
 } from "./kicked";
 import { showLanding } from "./landing";
-import { rgbToCss } from "./palette";
 import {
   parseRoomCode,
   type Player,
@@ -159,7 +158,6 @@ function renderPlayers(): void {
     return sb - sa || a.id - b.id;
   });
   const items = sorted.map((p, idx) => {
-    const color = rgbToCss(colorOf(p.id));
     const score = gameState.scores.get(p.id);
     const prev = prevScores.get(p.id);
     const changed = score !== undefined && prev !== undefined && score !== prev;
@@ -183,12 +181,16 @@ function renderPlayers(): void {
     const guessedTag = correctGuessers.has(p.id)
       ? '<span class="players-guessed" title="Guessed correctly">✓</span>'
       : "";
-    return `<li>
+    const correctClass = correctGuessers.has(p.id) ? " players-li--correct" : "";
+    return `<li class="${correctClass}">
       ${rankTag}
       <span class="players-avatar">${renderAvatar(p.avatar)}</span>
-      <span class="swatch" style="background:${color}"></span>
-      <span class="players-name">${escapeHtml(p.name)}</span>
-      ${youTag}${hostTag}${guessedTag}${scoreTag}${kickBtn}
+      <div class="players-info">
+        <span class="players-name">${escapeHtml(p.name)}</span>
+        <span class="players-meta">
+          ${youTag}${hostTag}${guessedTag}${scoreTag}${kickBtn}
+        </span>
+      </div>
     </li>`;
   });
   const pendingItems =

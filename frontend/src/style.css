@@ -106,6 +106,24 @@ h2 {
   min-height: 0;
 }
 
+@media (max-width: 1100px) {
+  .workspace {
+    grid-template-columns: 1fr var(--sidebar-w);
+  }
+  .sidebar--left {
+    grid-column: 1 / -1;
+    overflow-y: visible;
+  }
+  .players ul {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+  }
+  .players li {
+    animation: none;
+  }
+}
+
 .stage {
   display: flex;
   flex-direction: column;
@@ -995,15 +1013,17 @@ canvas {
 .players li {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   padding: 4px 6px;
   border-radius: 8px;
-  animation: player-slide-in 200ms ease-out;
+  min-width: 0;
+  transition: background-color 300ms ease-out, border-color 300ms ease-out;
+  border: 1px solid transparent;
 }
 
-@keyframes player-slide-in {
-  from { opacity: 0.6; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
+.players li.players-li--correct {
+  background: linear-gradient(135deg, rgba(252, 228, 236, 0.5), rgba(224, 242, 241, 0.5));
+  border-color: #8ecac4;
 }
 
 .swatch {
@@ -1015,8 +1035,8 @@ canvas {
 
 .players-avatar {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   overflow: hidden;
   background: linear-gradient(135deg, #fce4ec, #e0f2f1);
@@ -1577,20 +1597,36 @@ canvas {
 }
 
 .players-name {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
 }
 
 .players-rank {
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--muted);
-  min-width: 20px;
+  width: 18px;
   text-align: center;
   flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
+.players-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.players-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .players-guessed {
