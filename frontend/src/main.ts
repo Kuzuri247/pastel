@@ -602,6 +602,12 @@ function handleGameEvent(event: Extract<ServerMsg, { kind: "Game" }>["event"]): 
       pendingJoiners.delete(event.candidate);
       renderPlayers();
       return;
+    case "HostChanged":
+      gameState.host = event.new_host;
+      chat.appendSystem(`${nameOf(event.new_host)} is the new host`);
+      renderPlayers();
+      renderGameUI();
+      return;
   }
 }
 
