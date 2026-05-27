@@ -7,7 +7,7 @@ import { showRoundIntro } from "./roundIntro";
 import { mountChat, type ChatPanel } from "./chat";
 import { showConfirm } from "./dialog";
 import { showToast } from "./toast";
-import { applyScores, emptyState, type GamePhase, type GameState } from "./game";
+import { applyScores, emptyState, MODE_OPTIONS, type GamePhase, type GameState } from "./game";
 import { mountGameUI } from "./gameUI";
 import {
   hideJoinPendingScreen,
@@ -18,7 +18,6 @@ import { showLanding } from "./landing";
 import { rgbToCss } from "./palette";
 import {
   parseRoomCode,
-  type GameMode,
   type Player,
   type ServerMsg,
 } from "./proto";
@@ -85,6 +84,16 @@ const room = pickRoomCode();
 const { name, avatar } = await pickNameAndAvatar();
 const clientToken = pickClientToken();
 document.title = `pastel · ${room}`;
+
+// Mode for the next game start. Seeded from the URL (?mode=...) which the
+// landing page sets for the host. Falls back to Standard for joiners and
+// reloads. Updated after each game from the snapshot so rematches keep the
+// same mode.
+const urlMode = new URLSearchParams(window.location.search).get("mode");
+let selectedMode: import("./proto").GameMode =
+  (urlMode === "Sprint" || urlMode === "Standard" || urlMode === "Marathon")
+    ? urlMode
+    : "Standard";
 
 const surface = new DrawingSurface(canvasEl);
 
@@ -254,12 +263,11 @@ const chat: ChatPanel = mountChat(chatEl, {
 });
 
 const gameUI = mountGameUI(overlayEl, {
-  onStart: (mode: GameMode) => conn.send({ kind: "Game", action: { kind: "Start", mode } }),
+  onStart: () =>
+    conn.send({ kind: "Game", action: { kind: "Start", mode: selectedMode } }),
   onPickWord: (index) =>
     conn.send({ kind: "Game", action: { kind: "PickWord", index } }),
   onRematch: () => {
-    // Returning to Lobby is purely client-side until the server is told
-    // to Start again. Show the mode picker.
     gameState.phase = { kind: "Lobby" };
     renderGameUI();
   },
@@ -280,6 +288,11 @@ const wsUrl = (() => {
   return `${proto}//${window.location.host}/ws/${room}`;
 })();
 
+function modeBadge(): string {
+  const m = MODE_OPTIONS.find((o) => o.id === selectedMode) ?? MODE_OPTIONS[1];
+  return `${m.label} · ${m.rounds} rounds`;
+}
+
 function renderGameUI(): void {
   gameUI.render(gameState.phase, {
     you: youId,
@@ -287,6 +300,12 @@ function renderGameUI(): void {
     playerCount: players.size,
     nameOf: (id) => nameOf(id),
     avatarOf: (id) => avatarOf(id),
+    modeBadge: modeBadge(),
+    playerAvatars: Array.from(players.values()).map((p) => ({
+      id: p.id,
+      name: p.name,
+      avatarHtml: avatarOf(p.id),
+    })),
     onCopyInvite: copyInviteLink,
   });
   updateBanner();
@@ -370,6 +389,8 @@ function startBannerTicker(): void {
 
 function applyGameSnapshot(snap: import("./proto").GameSnapshot): void {
   gameState.host = snap.host;
+  // Keep selectedMode in sync so rematches use the last-played mode.
+  selectedMode = snap.mode;
   gameState.scores.clear();
   for (const [id, v] of snap.scores) gameState.scores.set(id, v);
   switch (snap.phase.kind) {

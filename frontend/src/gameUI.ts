@@ -1,11 +1,10 @@
 // UI for the game loop overlays: mode picker, word pick, drawing banner
 // (mask + timer + round counter), round-end reveal, game-over podium.
 
-import { MODE_OPTIONS, type GamePhase } from "./game";
-import type { GameMode } from "./proto";
+import type { GamePhase } from "./game";
 
 export interface GameUIHandlers {
-  onStart: (mode: GameMode) => void;
+  onStart: () => void;
   onPickWord: (index: number) => void;
   onRematch: () => void;
 }
@@ -16,6 +15,8 @@ export interface RenderContext {
   playerCount: number;
   nameOf: (id: number) => string;
   avatarOf: (id: number) => string;
+  modeBadge: string;
+  playerAvatars: { id: number; name: string; avatarHtml: string }[];
   onCopyInvite: () => void;
 }
 
@@ -42,52 +43,45 @@ export function mountGameUI(root: HTMLElement, handlers: GameUIHandlers): GameUI
   function renderLobby(ctx: RenderContext): void {
     visible();
     const isHost = ctx.you !== null && ctx.you === ctx.host;
-    if (!isHost) {
-      const hostName = ctx.host !== null ? ctx.nameOf(ctx.host) : "the host";
-      root.innerHTML = `
-        <div class="overlay-card">
-          <h2>Waiting for ${escapeHtml(hostName)}</h2>
-          <p class="overlay-hint">${escapeHtml(hostName)} picks the mode and starts the game.</p>
-          <button type="button" class="invite-primary">Copy invite link</button>
-        </div>
-      `;
-      wireInvite(ctx);
-      return;
-    }
-    if (ctx.playerCount < 2) {
-      root.innerHTML = `
-        <div class="overlay-card">
-          <h2>You're alone in here</h2>
-          <p class="overlay-hint">
-            At least 2 players needed to start. Did you invite anyone?
-          </p>
-          <button type="button" class="invite-primary">Copy invite link</button>
-        </div>
-      `;
-      wireInvite(ctx);
-      return;
-    }
-    const options = MODE_OPTIONS.map(
-      (m) => `
-      <button type="button" class="mode-card" data-mode="${m.id}">
-        <span class="mode-label">${m.label}</span>
-        <span class="mode-meta">${m.rounds} rounds · ${m.wordChoices} words</span>
-      </button>`,
-    ).join("");
+    const canStart = isHost && ctx.playerCount >= 2;
+    const avatarChips = ctx.playerAvatars
+      .map(
+        (p) => `<div class="lobby-player" title="${escapeHtml(p.name)}">
+          <span class="lobby-player-avatar">${p.avatarHtml}</span>
+          <span class="lobby-player-name">${escapeHtml(p.name)}</span>
+        </div>`,
+      )
+      .join("");
+    const hostName = ctx.host !== null ? ctx.nameOf(ctx.host) : "the host";
+    const startSection = isHost
+      ? `<button type="button" class="lobby-start" ${canStart ? "" : "disabled"}>
+           Start game
+         </button>
+         ${
+           ctx.playerCount < 2
+             ? '<p class="lobby-hint">Waiting for at least 2 players to join</p>'
+             : `<p class="lobby-hint">${ctx.playerCount} player${ctx.playerCount !== 1 ? "s" : ""} ready</p>`
+         }`
+      : `<p class="lobby-waiting">Waiting for <strong>${escapeHtml(hostName)}</strong> to start</p>`;
+
     root.innerHTML = `
-      <div class="overlay-card">
-        <h2>Pick a mode</h2>
-        <div class="mode-grid">${options}</div>
-        <p class="overlay-hint">Every player draws once per round. You're the host.</p>
-        <button type="button" class="invite-secondary">Copy invite link</button>
+      <div class="overlay-card overlay-card--lobby">
+        <div class="lobby-head">
+          <h2>Lobby</h2>
+          <span class="lobby-mode-badge">${escapeHtml(ctx.modeBadge)}</span>
+        </div>
+        <div class="lobby-players">${avatarChips}</div>
+        <div class="lobby-actions">
+          ${startSection}
+        </div>
+        <div class="lobby-invite">
+          <button type="button" class="invite-secondary">Copy invite link</button>
+        </div>
       </div>
     `;
-    for (const btn of root.querySelectorAll<HTMLButtonElement>(".mode-card")) {
-      btn.addEventListener("click", () => {
-        const mode = btn.dataset.mode as GameMode;
-        handlers.onStart(mode);
-      });
-    }
+    root
+      .querySelector<HTMLButtonElement>(".lobby-start")
+      ?.addEventListener("click", () => handlers.onStart());
     wireInvite(ctx);
   }
 
