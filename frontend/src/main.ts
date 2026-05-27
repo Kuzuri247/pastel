@@ -109,14 +109,50 @@ function colorOf(id: number): number {
 }
 
 function renderPlayers(): void {
+  const youAreHost = youId !== null && youId === gameState.host;
   const items = Array.from(players.values()).map((p) => {
     const color = rgbToCss(colorOf(p.id));
     const score = gameState.scores.get(p.id);
-    const scoreTag = score !== undefined ? ` <span class="players-score">${score}</span>` : "";
-    const youTag = p.id === youId ? ' <span class="players-you">(you)</span>' : "";
-    return `<li><span class="swatch" style="background:${color}"></span><span class="players-name">${escapeHtml(p.name)}</span>${youTag}${scoreTag}</li>`;
+    const scoreTag =
+      score !== undefined ? `<span class="players-score">${score}</span>` : "";
+    const youTag = p.id === youId ? '<span class="players-you">(you)</span>' : "";
+    const hostTag =
+      p.id === gameState.host ? '<span class="players-host">host</span>' : "";
+    const kickBtn =
+      youAreHost && p.id !== youId
+        ? `<button class="players-kick" data-target="${p.id}" title="Remove ${escapeHtml(
+            p.name,
+          )} from the room" aria-label="Remove ${escapeHtml(p.name)}">×</button>`
+        : "";
+    return `<li>
+      <span class="swatch" style="background:${color}"></span>
+      <span class="players-name">${escapeHtml(p.name)}</span>
+      ${youTag}${hostTag}${scoreTag}${kickBtn}
+    </li>`;
   });
-  playersEl.innerHTML = `<h2>Room ${room}</h2><ul>${items.join("")}</ul>`;
+  playersEl.innerHTML = `
+    <div class="players-head">
+      <h2>Room <span class="room-code">${room}</span></h2>
+      <button class="players-invite" type="button" title="Copy invite link">
+        Invite
+      </button>
+    </div>
+    <ul>${items.join("")}</ul>
+  `;
+  for (const btn of playersEl.querySelectorAll<HTMLButtonElement>(".players-kick")) {
+    btn.addEventListener("click", () => {
+      const target = Number(btn.dataset.target);
+      if (Number.isNaN(target)) return;
+      if (window.confirm(`Remove ${nameOf(target)} from the room?`)) {
+        conn.send({ kind: "Game", action: { kind: "Kick", player: target } });
+      }
+    });
+  }
+  playersEl
+    .querySelector<HTMLButtonElement>(".players-invite")
+    ?.addEventListener("click", () => {
+      void copyInviteLink();
+    });
 }
 
 const chatBucket = new TokenBucket(CHAT_BUCKET_CAPACITY, CHAT_BUCKET_REFILL_PER_SEC);
@@ -166,9 +202,34 @@ function renderGameUI(): void {
   gameUI.render(gameState.phase, {
     you: youId,
     host: gameState.host,
+    playerCount: players.size,
     nameOf: (id) => nameOf(id),
+    onCopyInvite: copyInviteLink,
   });
   updateBanner();
+}
+
+async function copyInviteLink(): Promise<void> {
+  const url = window.location.href;
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(url);
+    } else {
+      // Fallback for non-secure contexts (e.g. plain http during dev).
+      const ta = document.createElement("textarea");
+      ta.value = url;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    chat.appendSystem("invite link copied to clipboard");
+  } catch {
+    chat.appendSystem("could not copy invite link, here it is: " + url);
+  }
 }
 
 function updateBanner(): void {
