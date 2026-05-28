@@ -172,7 +172,7 @@ function readChatLine(r: Reader): ChatLine {
 }
 
 export type GamePhaseSnapshot =
-  | { kind: "Lobby" }
+  | { kind: "Lobby"; deadline_ms: number | null }
   | {
       kind: "ChoosingWord";
       drawer: number;
@@ -194,7 +194,13 @@ export type GamePhaseSnapshot =
 function writeGamePhaseSnapshot(w: Writer, p: GamePhaseSnapshot): void {
   switch (p.kind) {
     case "Lobby":
-      return void w.variant(0);
+      w.variant(0);
+      if (p.deadline_ms === null) {
+        w.variant(0); // Option::None
+      } else {
+        w.variant(1).varint(p.deadline_ms); // Option::Some
+      }
+      return;
     case "ChoosingWord":
       w.variant(1)
         .varint(p.drawer)
@@ -221,8 +227,11 @@ function writeGamePhaseSnapshot(w: Writer, p: GamePhaseSnapshot): void {
 function readGamePhaseSnapshot(r: Reader): GamePhaseSnapshot {
   const v = r.variant();
   switch (v) {
-    case 0:
-      return { kind: "Lobby" };
+    case 0: {
+      const opt = r.variant();
+      const deadline_ms = opt === 0 ? null : r.varint();
+      return { kind: "Lobby", deadline_ms };
+    }
     case 1:
       return {
         kind: "ChoosingWord",
@@ -273,7 +282,12 @@ function readGameSnapshot(r: Reader): GameSnapshot {
 }
 
 export function emptyGameSnapshot(): GameSnapshot {
-  return { mode: "Standard", host: null, scores: [], phase: { kind: "Lobby" } };
+  return {
+    mode: "Standard",
+    host: null,
+    scores: [],
+    phase: { kind: "Lobby", deadline_ms: null },
+  };
 }
 
 export interface RoomSnapshot {

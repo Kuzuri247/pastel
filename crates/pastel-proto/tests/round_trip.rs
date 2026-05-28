@@ -105,7 +105,8 @@ fn arb_chat_line() -> impl Strategy<Value = ChatLine> {
 
 fn arb_game_phase_snapshot() -> impl Strategy<Value = GamePhaseSnapshot> {
     prop_oneof![
-        Just(GamePhaseSnapshot::Lobby),
+        proptest::option::of(any::<u32>())
+            .prop_map(|deadline_ms| GamePhaseSnapshot::Lobby { deadline_ms }),
         (any::<u32>(), any::<u32>(), any::<u8>(), any::<u8>()).prop_map(
             |(drawer, deadline_ms, round_index, total_rounds)| {
                 GamePhaseSnapshot::ChoosingWord {

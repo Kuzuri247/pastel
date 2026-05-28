@@ -152,7 +152,14 @@ pub struct ChatLine {
 /// needing wall-clock sync.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GamePhaseSnapshot {
-    Lobby,
+    Lobby {
+        /// Milliseconds remaining before the room expires if no game is
+        /// started. `None` means no expiry (e.g. after the host clicks Start
+        /// in time, the lobby loses its timer; or in post-game rematch
+        /// lobbies which aren't time-bound).
+        #[serde(default)]
+        deadline_ms: Option<u32>,
+    },
     ChoosingWord {
         drawer: PlayerId,
         deadline_ms: u32,
@@ -187,7 +194,7 @@ impl Default for GameSnapshot {
             mode: GameMode::Standard,
             host: None,
             scores: Vec::new(),
-            phase: GamePhaseSnapshot::Lobby,
+            phase: GamePhaseSnapshot::Lobby { deadline_ms: None },
         }
     }
 }

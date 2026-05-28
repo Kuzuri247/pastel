@@ -161,7 +161,7 @@ describe("wire fixtures (must match Rust)", () => {
           mode: "Standard",
           host: null,
           scores: [],
-          phase: { kind: "Lobby" },
+          phase: { kind: "Lobby", deadline_ms: null },
         },
       },
       seq: 0,
@@ -169,8 +169,8 @@ describe("wire fixtures (must match Rust)", () => {
     };
     // variant 0, you 1, players 0, completed 0, snap.seq 0, chat 0,
     // game.mode Standard=1, game.host None=0, game.scores 0,
-    // game.phase Lobby=0, outer seq 0, lk_token 0
-    expect(hex(encodeServerMsg(msg))).toBe("000100000000010000000000");
+    // game.phase Lobby=0 + deadline_ms Option::None=0, outer seq 0, lk_token 0
+    expect(hex(encodeServerMsg(msg))).toBe("00010000000001000000000000");
     expect(decodeServerMsg(encodeServerMsg(msg))).toEqual(msg);
   });
 });

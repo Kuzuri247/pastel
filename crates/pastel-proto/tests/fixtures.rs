@@ -68,6 +68,7 @@ fn server_welcome_empty_snapshot_fixture() {
     };
     // variant 0, you 1, players 0, completed 0, snap.seq 0, chat 0,
     // game.mode Standard=1, game.host None=0, game.scores 0,
-    // game.phase Lobby=0, outer seq 0, lk_token len 0
-    assert_eq!(hex(&encode(&msg).unwrap()), "000100000000010000000000");
+    // game.phase Lobby=0 + deadline_ms Option::None=0, outer seq 0,
+    // lk_token len 0
+    assert_eq!(hex(&encode(&msg).unwrap()), "00010000000001000000000000");
 }
