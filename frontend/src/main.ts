@@ -650,7 +650,13 @@ function applyGameSnapshot(snap: import("./proto").GameSnapshot): void {
   for (const [id, v] of snap.scores) gameState.scores.set(id, v);
   switch (snap.phase.kind) {
     case "Lobby":
-      gameState.phase = { kind: "Lobby" };
+      gameState.phase = {
+        kind: "Lobby",
+        deadline:
+          snap.phase.deadline_ms !== null
+            ? performance.now() + snap.phase.deadline_ms
+            : undefined,
+      };
       return;
     case "ChoosingWord":
       gameState.phase = {
