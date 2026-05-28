@@ -14,7 +14,26 @@ import {
 import type { Avatar } from "./proto";
 
 const STORAGE_NAME = "pastel.name";
+const STORAGE_AVATAR = "pastel.avatar";
 const PART_ORDER: PartKey[] = ["skin", "hair", "eyes", "mouth", "accessory"];
+
+/// True when the browser has a saved name + avatar from a previous session.
+/// When true, callers can skip the picker and reuse the stored identity,
+/// pairing with the `pastel.client_token` fingerprint so a reload lands as
+/// the same player on the server.
+export function hasStoredIdentity(): boolean {
+  const name = window.localStorage.getItem(STORAGE_NAME);
+  const avatar = window.localStorage.getItem(STORAGE_AVATAR);
+  return !!name && name.trim().length > 0 && !!avatar;
+}
+
+/// Read the saved identity. Caller should only use this if `hasStoredIdentity`
+/// returned true; otherwise the avatar will be a fresh random one and the
+/// name will be empty.
+export function loadStoredIdentity(): PickedIdentity {
+  const name = (window.localStorage.getItem(STORAGE_NAME) ?? "").trim();
+  return { name, avatar: loadStoredAvatar() };
+}
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) =>
