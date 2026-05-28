@@ -77,6 +77,16 @@ pub enum GuessKind {
     Close,
 }
 
+/// What a guesser thinks of the drawing in progress. Aggregated server-side
+/// and surfaced back to the drawer when one mood crosses a threshold.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum DrawingMood {
+    /// "Looking good" — guesser is enjoying / getting the drawing.
+    Loved,
+    /// "I'm lost" — guesser can't figure out what's being drawn.
+    Confused,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ByeReason {
     Reconnect,
@@ -106,6 +116,12 @@ pub enum ClientMsg {
     Game(GameAction),
     Pong {
         nonce: u32,
+    },
+    /// Guesser reacting to the in-progress drawing. Server aggregates these
+    /// per round and unicasts a `DrawingFeedback` to the drawer once one
+    /// reaction type crosses the threshold.
+    React {
+        mood: DrawingMood,
     },
 }
 
@@ -168,4 +184,10 @@ pub enum ServerMsg {
     },
     /// Unicast to a candidate whose join is waiting on host approval.
     JoinPending,
+    /// Unicast to the drawer mid-round when guesser reactions cross a
+    /// threshold. The drawer's UI shows a soft "they love it" or "they're
+    /// lost" banner. Re-sent only when the dominant mood changes.
+    DrawingFeedback {
+        mood: DrawingMood,
+    },
 }

@@ -508,6 +508,19 @@ function readGameEvent(r: Reader): GameEvent {
 
 export type GuessKind = "Correct" | "Close";
 
+export type DrawingMood = "Loved" | "Confused";
+
+function writeDrawingMood(w: Writer, m: DrawingMood): void {
+  w.variant(m === "Loved" ? 0 : 1);
+}
+
+function readDrawingMood(r: Reader): DrawingMood {
+  const v = r.variant();
+  if (v === 0) return "Loved";
+  if (v === 1) return "Confused";
+  throw new Error(`unknown DrawingMood: ${v}`);
+}
+
 function writeGuessKind(w: Writer, k: GuessKind): void {
   w.variant(k === "Correct" ? 0 : 1);
 }
@@ -592,7 +605,8 @@ export type ClientMsg =
   | { kind: "Chat"; text: string }
   | { kind: "Guess"; text: string }
   | { kind: "Game"; action: GameAction }
-  | { kind: "Pong"; nonce: number };
+  | { kind: "Pong"; nonce: number }
+  | { kind: "React"; mood: DrawingMood };
 
 export function encodeClientMsg(msg: ClientMsg): Uint8Array<ArrayBuffer> {
   const w = new Writer();
@@ -624,6 +638,10 @@ export function encodeClientMsg(msg: ClientMsg): Uint8Array<ArrayBuffer> {
     case "Pong":
       w.variant(5).varint(msg.nonce);
       break;
+    case "React":
+      w.variant(6);
+      writeDrawingMood(w, msg.mood);
+      break;
   }
   return w.bytes();
 }
@@ -652,6 +670,8 @@ export function decodeClientMsg(bytes: Uint8Array): ClientMsg {
       return { kind: "Game", action: readGameAction(r) };
     case 5:
       return { kind: "Pong", nonce: r.varint() };
+    case 6:
+      return { kind: "React", mood: readDrawingMood(r) };
     default:
       throw new Error(`unknown ClientMsg variant: ${v}`);
   }
@@ -687,7 +707,8 @@ export type ServerMsg =
   | { kind: "Bye"; reason: ByeReason }
   | { kind: "WordOptions"; words: string[]; deadline_ms: number }
   | { kind: "DrawerWord"; word: string; duration_ms: number }
-  | { kind: "JoinPending" };
+  | { kind: "JoinPending" }
+  | { kind: "DrawingFeedback"; mood: DrawingMood };
 
 export function encodeServerMsg(msg: ServerMsg): Uint8Array<ArrayBuffer> {
   const w = new Writer();
@@ -751,6 +772,10 @@ function writeServerMsg(w: Writer, msg: ServerMsg): void {
       return;
     case "JoinPending":
       w.variant(11);
+      return;
+    case "DrawingFeedback":
+      w.variant(12);
+      writeDrawingMood(w, msg.mood);
       return;
   }
 }
@@ -821,6 +846,8 @@ function readServerMsg(r: Reader): ServerMsg {
       };
     case 11:
       return { kind: "JoinPending" };
+    case 12:
+      return { kind: "DrawingFeedback", mood: readDrawingMood(r) };
     default:
       throw new Error(`unknown ServerMsg variant: ${v}`);
   }

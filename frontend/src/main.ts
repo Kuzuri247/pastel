@@ -199,6 +199,11 @@ const prevScores = new Map<number, number>();
 const correctGuessers = new Set<number>();
 const speakingNames = new Set<string>();
 const mutedSpeakerNames = new Set<string>();
+// Reaction state, reset each round. Guessers stash what they picked so the
+// button stays selected. The drawer stashes the latest aggregated mood the
+// server pushed so the banner can render their feedback.
+let myReaction: import("./proto").DrawingMood | null = null;
+let drawerFeedback: import("./proto").DrawingMood | null = null;
 
 function nameOf(id: number, fallback = "anon"): string {
   return players.get(id)?.name ?? nameHistory.get(id) ?? fallback;
@@ -547,6 +552,34 @@ function updateBanner(): void {
   const hint = isDrawing && !isDrawer
     ? `<div class="banner-hint">${escapeHtml(nameOf(phase.drawer))} is drawing -- feel free to doodle, only you can see it</div>`
     : "";
+  // Guessers see a reaction strip; the drawer sees a feedback pill when the
+  // server reports a dominant mood from the room.
+  let extra = "";
+  if (isDrawing && !isDrawer) {
+    const lovedOn = myReaction === "Loved" ? " reaction-btn--on" : "";
+    const confusedOn = myReaction === "Confused" ? " reaction-btn--on" : "";
+    extra = `<div class="banner-reactions">
+      <button class="reaction-btn reaction-btn--love${lovedOn}" data-mood="Loved" type="button" title="Looking good">
+        <i class="ph-fill ph-sparkle" aria-hidden="true"></i>
+        <span>looking good</span>
+      </button>
+      <button class="reaction-btn reaction-btn--lost${confusedOn}" data-mood="Confused" type="button" title="I'm lost">
+        <i class="ph ph-question" aria-hidden="true"></i>
+        <span>i'm lost</span>
+      </button>
+    </div>`;
+  } else if (isDrawing && isDrawer && drawerFeedback) {
+    const fb = drawerFeedback;
+    const cls = fb === "Loved" ? "feedback-pill--love" : "feedback-pill--lost";
+    const text = fb === "Loved"
+      ? "they're loving it -- nice work!"
+      : "they're a bit lost -- bigger, clearer strokes?";
+    const icon = fb === "Loved" ? "ph-fill ph-sparkle" : "ph ph-question";
+    extra = `<div class="feedback-pill ${cls}">
+      <i class="${icon}" aria-hidden="true"></i>
+      <span>${text}</span>
+    </div>`;
+  }
   bannerEl.innerHTML = `
     <div class="banner-main">
       <div class="banner-drawer" title="${escapeHtml(nameOf(phase.drawer))}">
@@ -557,7 +590,17 @@ function updateBanner(): void {
       <div class="banner-timer" id="bannerTimer">--</div>
     </div>
     ${hint}
+    ${extra}
   `;
+  for (const btn of bannerEl.querySelectorAll<HTMLButtonElement>(".reaction-btn")) {
+    btn.addEventListener("click", () => {
+      const mood = btn.dataset.mood as import("./proto").DrawingMood | undefined;
+      if (!mood) return;
+      myReaction = mood;
+      conn.send({ kind: "React", mood });
+      updateBanner();
+    });
+  }
 }
 
 function startBannerTicker(): void {
@@ -777,6 +820,10 @@ function handleMessage(msg: ServerMsg): void {
     case "JoinPending":
       showJoinPendingScreen();
       return;
+    case "DrawingFeedback":
+      drawerFeedback = msg.mood;
+      updateBanner();
+      return;
   }
 }
 
@@ -816,6 +863,8 @@ function handleGameEvent(event: Extract<ServerMsg, { kind: "Game" }>["event"]): 
     case "RoundStart": {
       void setBgScene("game");
       playRoundStart();
+      myReaction = null;
+      drawerFeedback = null;
       const deadline = performance.now() + event.duration_ms;
       gameState.phase = {
         kind: "Drawing",

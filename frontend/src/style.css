@@ -389,6 +389,89 @@ canvas {
   text-align: center;
 }
 
+/* Guessers' react strip on the in-game banner. Two pastel pills. */
+.banner-reactions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.reaction-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px dashed var(--line);
+  background: #ffffff;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  transition: transform 140ms, color 140ms, background 140ms, border-color 140ms, box-shadow 140ms;
+}
+
+.reaction-btn i {
+  font-size: 13px;
+}
+
+.reaction-btn:hover {
+  transform: translateY(-1px);
+  color: var(--ink);
+}
+
+.reaction-btn--love.reaction-btn--on {
+  background: linear-gradient(135deg, #ffe6ee, #fff4d6);
+  border: 1px solid #d4a0a8;
+  color: #b76e79;
+  box-shadow: 0 2px 8px rgba(212, 160, 168, 0.18);
+}
+
+.reaction-btn--lost.reaction-btn--on {
+  background: linear-gradient(135deg, #fff4d6, #fef0e4);
+  border: 1px solid #c99a3a;
+  color: #8c6a18;
+  box-shadow: 0 2px 8px rgba(201, 154, 58, 0.18);
+}
+
+/* Drawer's feedback pill: soft pastel banner saying how the room feels. */
+.feedback-pill {
+  margin-top: 8px;
+  display: inline-flex;
+  align-self: center;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 500;
+  animation: feedback-in 320ms ease-out;
+}
+
+.feedback-pill i {
+  font-size: 14px;
+}
+
+.feedback-pill--love {
+  background: linear-gradient(135deg, #ffe6ee, #fff4d6);
+  color: #b76e79;
+  border: 1px dashed #d4a0a8;
+}
+
+.feedback-pill--lost {
+  background: linear-gradient(135deg, #fff4d6, #fef0e4);
+  color: #8c6a18;
+  border: 1px dashed #c99a3a;
+}
+
+@keyframes feedback-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .banner-round {
   font-size: 11px;
   font-weight: 600;

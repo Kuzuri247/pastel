@@ -156,6 +156,7 @@ struct InProgressStroke {
     points: Vec<Point>,
 }
 
+#[allow(clippy::large_enum_variant)]
 enum GamePhase {
     Lobby,
     ChoosingWord {
@@ -175,6 +176,12 @@ enum GamePhase {
         scores_this_round: AHashMap<PlayerId, u32>,
         correct_guessers: Vec<PlayerId>,
         hint_schedule: Vec<Instant>,
+        /// Latest mood per guesser this round. Latest reaction wins if a
+        /// player toggles. Reset on round start.
+        reactions: AHashMap<PlayerId, DrawingMood>,
+        /// Mood we last surfaced to the drawer, so re-sending the same mood
+        /// is suppressed and only mood changes show a fresh banner.
+        last_feedback: Option<DrawingMood>,
     },
     RoundEnd {
         #[allow(dead_code)]
@@ -606,6 +613,7 @@ impl Room {
             ClientMsg::Game(GameAction::RejectJoin(candidate)) => {
                 self.handle_reject_join(player, candidate)
             }
+            ClientMsg::React { mood } => self.handle_react(player, mood),
             ClientMsg::Hello(_) | ClientMsg::Pong { .. } => {
                 // Hello is connection setup.
             }
@@ -635,6 +643,57 @@ impl Room {
             reason: ByeReason::Kicked,
         }));
         self.handle_leave(target);
+    }
+
+    fn handle_react(&mut self, player: PlayerId, mood: DrawingMood) {
+        // Only during the drawing phase, and only from non-drawer participants.
+        let GamePhase::Drawing {
+            drawer,
+            reactions,
+            last_feedback,
+            ..
+        } = &mut self.game.phase
+        else {
+            return;
+        };
+        if player == *drawer {
+            return;
+        }
+        // Latest reaction from each guesser wins.
+        reactions.insert(player, mood);
+
+        // Compute dominant mood. Threshold: half the *current guesser pool*
+        // (everyone alive except the drawer). Using guesser pool, not just
+        // those who've reacted, so silence reads as neutral rather than
+        // amplifying one early reaction.
+        let guesser_count = self.players.len().saturating_sub(1);
+        if guesser_count == 0 {
+            return;
+        }
+        let needed = guesser_count.div_ceil(2);
+        let loved = reactions.values().filter(|m| matches!(m, DrawingMood::Loved)).count();
+        let confused = reactions
+            .values()
+            .filter(|m| matches!(m, DrawingMood::Confused))
+            .count();
+
+        let dominant = if loved >= needed {
+            Some(DrawingMood::Loved)
+        } else if confused >= needed {
+            Some(DrawingMood::Confused)
+        } else {
+            None
+        };
+
+        let Some(new_mood) = dominant else {
+            return;
+        };
+        if *last_feedback == Some(new_mood) {
+            return;
+        }
+        *last_feedback = Some(new_mood);
+        let drawer_id = *drawer;
+        self.unicast(drawer_id, ServerMsg::DrawingFeedback { mood: new_mood });
     }
 
     fn handle_clear(&mut self, player: PlayerId) {
@@ -846,6 +905,8 @@ impl Room {
             scores_this_round: AHashMap::new(),
             correct_guessers: Vec::new(),
             hint_schedule: Vec::new(),
+            reactions: AHashMap::new(),
+            last_feedback: None,
         };
     }
 
@@ -1025,6 +1086,8 @@ impl Room {
             scores_this_round: AHashMap::new(),
             correct_guessers: Vec::new(),
             hint_schedule,
+            reactions: AHashMap::new(),
+            last_feedback: None,
         };
 
         let seq = self.next_seq();
