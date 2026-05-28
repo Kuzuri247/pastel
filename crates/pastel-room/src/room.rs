@@ -243,6 +243,11 @@ struct Room {
     kicked_tokens: HashSet<String>,
     /// Candidates currently waiting for the host to approve their rejoin.
     pending: AHashMap<PlayerId, PendingJoiner>,
+    /// Players who left voluntarily, indexed by their `client_token`. When a
+    /// Hello arrives with a matching token, we reuse the original `PlayerId`
+    /// so accumulated scores, rotation slot, and scoreboard row carry over
+    /// from before the disconnect.
+    departed: AHashMap<String, PlayerId>,
 }
 
 impl Room {
@@ -264,6 +269,7 @@ impl Room {
             broadcast_tx,
             kicked_tokens: HashSet::new(),
             pending: AHashMap::new(),
+            departed: AHashMap::new(),
         }
     }
 
@@ -318,6 +324,7 @@ impl Room {
                     id: *id,
                     name: slot.name.clone(),
                     avatar: slot.avatar,
+                    is_bot: slot.is_bot,
                 })
                 .collect(),
             completed: self.completed.iter().cloned().collect(),
@@ -396,6 +403,23 @@ impl Room {
             return;
         }
 
+        // Same-browser rejoin (reload, brief disconnect): if this client_token
+        // matches a previously-departed slot in this room, hand back the same
+        // PlayerId so cumulative scores and scoreboard rows survive.
+        if let Some(token) = hello.client_token.as_ref() {
+            if let Some(prev_id) = self.departed.remove(token) {
+                let join = self.admit_player(
+                    prev_id,
+                    hello.name,
+                    hello.client_token,
+                    hello.avatar,
+                    is_bot,
+                );
+                let _ = reply.send(Ok(JoinOutcome::Joined(join)));
+                return;
+            }
+        }
+
         let id = self.next_player_id;
         self.next_player_id = self.next_player_id.wrapping_add(1);
 
@@ -445,9 +469,10 @@ impl Room {
         avatar: Avatar,
         is_bot: bool,
     ) -> JoinResult {
-        // First joiner becomes host. Host status only changes if the
-        // current host has left (see handle_leave).
-        if self.game.host.is_none() {
+        // First human joiner becomes host. Bots never get the host badge —
+        // even if a bot is the only player in the room for a moment, host
+        // stays unassigned until a human shows up.
+        if self.game.host.is_none() && !is_bot {
             self.game.host = Some(id);
         }
 
@@ -485,7 +510,12 @@ impl Room {
         let seq = self.next_seq();
         self.broadcast(ServerMsg::Presence {
             seq,
-            joined: vec![Player { id, name, avatar }],
+            joined: vec![Player {
+                id,
+                name,
+                avatar,
+                is_bot,
+            }],
             left: vec![],
         });
 
@@ -536,8 +566,17 @@ impl Room {
     }
 
     fn handle_leave(&mut self, player: PlayerId) {
-        if self.players.remove(&player).is_none() {
+        let Some(slot) = self.players.remove(&player) else {
             return;
+        };
+        // Stash the (client_token -> PlayerId) so a reconnect from the same
+        // browser comes back as the same player rather than a duplicate row
+        // on the scoreboard. Kicked players already have their own approval
+        // flow, so skip the stash for those.
+        if let Some(tok) = slot.client_token.clone() {
+            if !self.kicked_tokens.contains(&tok) {
+                self.departed.insert(tok, player);
+            }
         }
         self.in_progress.retain(|(p, _), _| *p != player);
 
@@ -550,10 +589,17 @@ impl Room {
         };
 
         // Host transfer: if the host leaves, pass to the oldest remaining
-        // player (lowest PlayerId, since IDs increase monotonically).
+        // human (lowest PlayerId among non-bots). Bots never hold host so
+        // they can't decide round flow, kick, etc. If only bots remain,
+        // host stays None until a human joins.
         let mut new_host = None;
         if self.game.host == Some(player) {
-            self.game.host = self.players.keys().min().copied();
+            self.game.host = self
+                .players
+                .iter()
+                .filter(|(_, slot)| !slot.is_bot)
+                .map(|(id, _)| *id)
+                .min();
             new_host = self.game.host;
         }
 
@@ -1211,7 +1257,7 @@ impl Room {
         }
 
         let _ = correct_guessers; // already tracked in scores_this_round
-        let cumulative = ranked_scores(&self.game.scores);
+        let cumulative = self.ranked_scores_current();
         let seq = self.next_seq();
         self.broadcast(ServerMsg::Game {
             seq,
@@ -1252,13 +1298,26 @@ impl Room {
     }
 
     fn end_game(&mut self) {
-        let final_scores = ranked_scores(&self.game.scores);
+        let final_scores = self.ranked_scores_current();
         let seq = self.next_seq();
         self.broadcast(ServerMsg::Game {
             seq,
             event: GameEvent::GameOver { final_scores },
         });
         self.game.phase = GamePhase::GameOver;
+    }
+
+    /// Ranked scoreboard restricted to players currently in the room.
+    /// Players who left mid-game keep their scores in `self.game.scores`
+    /// (so totals stay correct if they rejoin), but we don't surface them
+    /// to UIs that should only show people who are actually here now.
+    fn ranked_scores_current(&self) -> Vec<(PlayerId, u32)> {
+        let mut filtered: AHashMap<PlayerId, u32> = AHashMap::with_capacity(self.players.len());
+        for pid in self.players.keys() {
+            let s = self.game.scores.get(pid).copied().unwrap_or(0);
+            filtered.insert(*pid, s);
+        }
+        ranked_scores(&filtered)
     }
 
     // ---- deadlines -------------------------------------------------------

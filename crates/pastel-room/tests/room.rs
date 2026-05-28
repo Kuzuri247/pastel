@@ -400,3 +400,229 @@ async fn non_host_leaving_does_not_broadcast_host_changed() {
         "non-host leaving should not produce a HostChanged"
     );
 }
+
+// ---- scoreboard filter + same-browser rejoin ----------------------------
+
+fn hello_with_token(name: &str, token: &str) -> Hello {
+    Hello {
+        room: code(),
+        name: name.into(),
+        resume_from: None,
+        client_token: Some(token.into()),
+        avatar: Avatar::default(),
+    }
+}
+
+async fn join_with_token(h: &RoomHandle, name: &str, token: &str) -> JoinResult {
+    match h.join(hello_with_token(name, token)).await.unwrap() {
+        JoinOutcome::Joined(j) => j,
+        JoinOutcome::Pending { .. } => panic!("unexpected pending join"),
+    }
+}
+
+/// Scoreboard filter: a player who scored and then left should not appear in
+/// the next RoundEnd broadcast even though their score is still tracked
+/// internally (so they can resume it if they reconnect with the same token).
+#[tokio::test]
+async fn round_end_excludes_departed_players() {
+    let h = spawn();
+    let mut a = join(&h, "alice").await; // drawer
+    let mut b = join(&h, "bob").await;
+    let mut c = join(&h, "carol").await;
+    let _ = next_unicast(&mut a.unicast_rx).await;
+    let _ = next_unicast(&mut b.unicast_rx).await;
+    let _ = next_unicast(&mut c.unicast_rx).await;
+    drain_presence(&mut a.broadcast_rx, 3).await;
+    drain_presence(&mut b.broadcast_rx, 2).await;
+    drain_presence(&mut c.broadcast_rx, 1).await;
+
+    h.set_secret(a.you, "apple").await;
+
+    // Carol guesses correctly first, scoring herself + giving the drawer bonus.
+    h.send(
+        c.you,
+        ClientMsg::Guess {
+            text: "apple".into(),
+        },
+    )
+    .await;
+    for rx in [
+        &mut a.broadcast_rx,
+        &mut b.broadcast_rx,
+        &mut c.broadcast_rx,
+    ] {
+        match next(rx).await.as_ref() {
+            ServerMsg::Guess {
+                kind: GuessKind::Correct,
+                ..
+            } => {}
+            other => panic!("expected Correct, got {other:?}"),
+        }
+    }
+
+    // Carol disconnects mid-round. Her score row is stashed in the room but
+    // she is no longer in `self.players`.
+    h.leave(c.you).await;
+    match next(&mut a.broadcast_rx).await.as_ref() {
+        ServerMsg::Presence { left, .. } => assert_eq!(left, &vec![c.you]),
+        other => panic!("expected Presence, got {other:?}"),
+    }
+    let _ = next(&mut b.broadcast_rx).await; // bob also sees the presence
+
+    // Bob now guesses, closing out the round (no remaining guessers).
+    h.send(
+        b.you,
+        ClientMsg::Guess {
+            text: "apple".into(),
+        },
+    )
+    .await;
+    for rx in [&mut a.broadcast_rx, &mut b.broadcast_rx] {
+        match next(rx).await.as_ref() {
+            ServerMsg::Guess {
+                kind: GuessKind::Correct,
+                ..
+            } => {}
+            other => panic!("expected Correct, got {other:?}"),
+        }
+    }
+
+    // RoundEnd should show only alice + bob; carol must be filtered out.
+    match next(&mut a.broadcast_rx).await.as_ref() {
+        ServerMsg::Game {
+            event: GameEvent::RoundEnd { scores, .. },
+            ..
+        } => {
+            let ids: Vec<PlayerId> = scores.iter().map(|(p, _)| *p).collect();
+            assert!(ids.contains(&a.you), "alice missing from RoundEnd scores");
+            assert!(ids.contains(&b.you), "bob missing from RoundEnd scores");
+            assert!(
+                !ids.contains(&c.you),
+                "carol (departed) should not appear in RoundEnd scores; got {scores:?}"
+            );
+        }
+        other => panic!("expected RoundEnd, got {other:?}"),
+    }
+}
+
+/// Same-browser rejoin: leaving and reconnecting with the same client_token
+/// should hand back the same PlayerId so cumulative scores stay attached and
+/// the scoreboard doesn't show a duplicate row.
+#[tokio::test]
+async fn rejoin_with_same_client_token_restores_player_id() {
+    let h = spawn();
+    let mut alice = join_with_token(&h, "alice", "tok-alice").await;
+    let original_id = alice.you;
+    let _ = next_unicast(&mut alice.unicast_rx).await;
+    drain_presence(&mut alice.broadcast_rx, 1).await;
+
+    // Disconnect.
+    h.leave(alice.you).await;
+
+    // Reconnect with the same token. Should resolve back to the same PlayerId.
+    let alice2 = join_with_token(&h, "alice", "tok-alice").await;
+    assert_eq!(
+        alice2.you, original_id,
+        "expected same PlayerId on rejoin; got fresh id {} vs original {}",
+        alice2.you, original_id,
+    );
+}
+
+async fn join_as_bot(h: &RoomHandle, name: &str) -> JoinResult {
+    match h.join_as_bot(hello(name)).await.unwrap() {
+        JoinOutcome::Joined(j) => j,
+        JoinOutcome::Pending { .. } => panic!("unexpected pending bot join"),
+    }
+}
+
+/// Bots must never become host. If a bot joins first, host stays unassigned
+/// (visible in the Welcome snapshot). The next human joiner takes the host
+/// badge; the bot stays headless even though it has a lower PlayerId.
+#[tokio::test]
+async fn bot_joining_first_does_not_become_host() {
+    let h = spawn();
+    let mut bot = join_as_bot(&h, "BotBob").await;
+    // The bot's own Welcome snapshot must show host = None.
+    match next_unicast(&mut bot.unicast_rx).await.as_ref() {
+        ServerMsg::Welcome { snapshot, .. } => {
+            assert_eq!(
+                snapshot.game.host, None,
+                "bot solo in room must not be host"
+            );
+        }
+        other => panic!("expected Welcome, got {other:?}"),
+    }
+
+    // Alice joins next. Her Welcome should show her as the host (she's the
+    // first human; bot is skipped).
+    let mut alice = join(&h, "alice").await;
+    match next_unicast(&mut alice.unicast_rx).await.as_ref() {
+        ServerMsg::Welcome { snapshot, you, .. } => {
+            assert_eq!(
+                snapshot.game.host,
+                Some(*you),
+                "first human joiner must be host"
+            );
+            assert_ne!(
+                snapshot.game.host,
+                Some(bot.you),
+                "host must not be the bot"
+            );
+        }
+        other => panic!("expected Welcome, got {other:?}"),
+    }
+}
+
+/// When the human host leaves and only a bot remains, host transfers to None,
+/// NOT to the bot. The next human who joins takes the host badge.
+#[tokio::test]
+async fn host_leaving_skips_bots_for_transfer() {
+    let h = spawn();
+    let mut alice = join(&h, "alice").await; // host
+    let mut bot = join_as_bot(&h, "BotBob").await;
+    let mut carol = join(&h, "carol").await;
+    let _ = next_unicast(&mut alice.unicast_rx).await;
+    let _ = next_unicast(&mut bot.unicast_rx).await;
+    let _ = next_unicast(&mut carol.unicast_rx).await;
+    drain_presence(&mut alice.broadcast_rx, 3).await;
+    drain_presence(&mut bot.broadcast_rx, 2).await;
+    drain_presence(&mut carol.broadcast_rx, 1).await;
+
+    // Alice (host) leaves. Transfer must pick carol (a human), skipping the
+    // bot even though the bot's PlayerId is lower than carol's.
+    h.leave(alice.you).await;
+    // Drain the Presence broadcast for alice leaving.
+    let _ = next(&mut carol.broadcast_rx).await;
+    // Then expect HostChanged with carol as the new host.
+    match next(&mut carol.broadcast_rx).await.as_ref() {
+        ServerMsg::Game {
+            event: GameEvent::HostChanged { new_host },
+            ..
+        } => {
+            assert_eq!(
+                *new_host, carol.you,
+                "host transfer must pick carol (human), not the bot"
+            );
+            assert_ne!(*new_host, bot.you);
+        }
+        other => panic!("expected HostChanged, got {other:?}"),
+    }
+}
+
+/// Different client_token => fresh PlayerId (control case for the test above).
+#[tokio::test]
+async fn rejoin_without_token_gets_fresh_player_id() {
+    let h = spawn();
+    let mut alice = join_with_token(&h, "alice", "tok-alice").await;
+    let original_id = alice.you;
+    let _ = next_unicast(&mut alice.unicast_rx).await;
+    drain_presence(&mut alice.broadcast_rx, 1).await;
+
+    h.leave(alice.you).await;
+
+    let bob = join_with_token(&h, "bob", "tok-bob").await;
+    assert_ne!(
+        bob.you, original_id,
+        "different token should get a different PlayerId"
+    );
+}
