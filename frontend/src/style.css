@@ -2087,6 +2087,27 @@ canvas {
   /* chat input: prevent iOS zoom */
   .chat-input { font-size: 16px; }
 
+  /* banner: shrink mask so it fits without horizontal scroll */
+  .banner { padding: 8px 10px; }
+  .banner-main { gap: 8px; }
+  .banner-drawer { width: 26px; height: 26px; }
+  .banner-round {
+    display: none;
+  }
+  .banner-mask {
+    font-size: 15px;
+    letter-spacing: 0.12em;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .banner-mask::-webkit-scrollbar { display: none; }
+  .banner-timer {
+    font-size: 14px;
+    min-width: 32px;
+  }
+  .banner-hint { font-size: 11px; }
+
   /* landing: tighten for small screens */
   .landing { padding: 16px; }
   .landing-inner { width: 100%; }
