@@ -3,6 +3,21 @@ import { pickNameAndAvatar } from "./avatarPicker";
 import { CHAT_BUCKET_CAPACITY, CHAT_BUCKET_REFILL_PER_SEC, TokenBucket } from "./bucket";
 import { DrawingSurface } from "./canvas";
 import { showCanvasEvent } from "./canvasEvent";
+import {
+  enableBg,
+  enableSfx,
+  isBgEnabled,
+  isSfxEnabled,
+  loadBgPreference,
+  loadSfxPreference,
+  playCorrect,
+  playGameOver,
+  playJoin,
+  playRoundEnd,
+  playRoundStart,
+  toggleBg,
+  toggleSfx,
+} from "./music";
 import { showRoundIntro } from "./roundIntro";
 import { mountChat, type ChatPanel } from "./chat";
 import { showConfirm } from "./dialog";
@@ -316,6 +331,40 @@ renderPlayers();
 renderGameUI();
 startBannerTicker();
 
+// Settings bar over the canvas: separate toggles for bg music and event sfx.
+// Both persist across sessions, default off. Browsers require a user gesture
+// before AudioContext.resume(), so a previously-saved "on" preference still
+// waits for any click before actually starting.
+const bgBtn = document.getElementById("bgToggle") as HTMLButtonElement | null;
+const sfxBtn = document.getElementById("sfxToggle") as HTMLButtonElement | null;
+function refreshAudioBtns(): void {
+  const bgOn = isBgEnabled();
+  const sfxOn = isSfxEnabled();
+  bgBtn?.classList.toggle("canvas-setting--on", bgOn);
+  sfxBtn?.classList.toggle("canvas-setting--on", sfxOn);
+  const bgIcon = bgBtn?.querySelector("i");
+  if (bgIcon) bgIcon.className = bgOn ? "ph-fill ph-music-notes" : "ph ph-music-notes";
+  const sfxIcon = sfxBtn?.querySelector("i");
+  if (sfxIcon) sfxIcon.className = sfxOn ? "ph-fill ph-speaker-high" : "ph ph-speaker-simple-slash";
+}
+bgBtn?.addEventListener("click", async () => {
+  await toggleBg();
+  refreshAudioBtns();
+});
+sfxBtn?.addEventListener("click", async () => {
+  await toggleSfx();
+  refreshAudioBtns();
+});
+if (loadBgPreference() || loadSfxPreference()) {
+  const armOnFirstClick = async () => {
+    if (loadBgPreference()) await enableBg();
+    if (loadSfxPreference()) await enableSfx();
+    refreshAudioBtns();
+  };
+  document.addEventListener("click", armOnFirstClick, { once: true });
+}
+refreshAudioBtns();
+
 const wsUrl = (() => {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${proto}//${window.location.host}/ws/${room}`;
@@ -517,7 +566,10 @@ function handleMessage(msg: ServerMsg): void {
         recordAvatar(p.id, p.avatar);
         // Approved rejoin: drop their entry from the host's pending list.
         pendingJoiners.delete(p.id);
-        if (p.id !== youId) chat.appendSystem(`${p.name} hopped in`, avatarOf(p.id));
+        if (p.id !== youId) {
+          chat.appendSystem(`${p.name} hopped in`, avatarOf(p.id));
+          playJoin();
+        }
       }
       for (const id of msg.left) {
         const who = nameOf(id);
@@ -559,6 +611,7 @@ function handleMessage(msg: ServerMsg): void {
       if (msg.guess === "Correct") {
         correctGuessers.add(msg.player);
         renderPlayers();
+        playCorrect();
         chat.appendCorrectGuess(
           nameOf(msg.player),
           colorOf(msg.player),
@@ -648,6 +701,7 @@ function handleGameEvent(event: Extract<ServerMsg, { kind: "Game" }>["event"]): 
       return;
     }
     case "RoundStart": {
+      playRoundStart();
       const deadline = performance.now() + event.duration_ms;
       gameState.phase = {
         kind: "Drawing",
@@ -701,10 +755,12 @@ function handleGameEvent(event: Extract<ServerMsg, { kind: "Game" }>["event"]): 
         scores: event.scores,
       };
       chat.appendSystem(`the word was "${event.word}"`);
+      playRoundEnd();
       renderPlayers();
       renderGameUI();
       return;
     case "GameOver":
+      playGameOver();
       applyScores(gameState, event.final_scores);
       gameState.phase = {
         kind: "GameOver",

@@ -73,6 +73,73 @@ h1 {
   align-items: center;
 }
 
+.canvas-settings {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 25;
+  display: flex;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(4px);
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  padding: 4px 6px;
+}
+
+.canvas-setting {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 120ms, background-color 120ms;
+  padding: 0;
+}
+
+.canvas-setting i {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.canvas-setting:hover {
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.canvas-setting--on {
+  color: var(--ink);
+  background: linear-gradient(135deg, #fce4ec, #e0f2f1);
+}
+
+.canvas-setting--on > i {
+  animation: audio-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes audio-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
+/* Occasional wiggle on player avatars when bg music is on */
+body:has(#bgToggle.canvas-setting--on) .players-avatar {
+  animation: avatar-wiggle 6s ease-in-out infinite;
+}
+
+@keyframes avatar-wiggle {
+  0%, 90%, 100% { transform: rotate(0deg); }
+  92% { transform: rotate(-6deg); }
+  94% { transform: rotate(6deg); }
+  96% { transform: rotate(-3deg); }
+  98% { transform: rotate(0deg); }
+}
+
 .logo-text {
   font-family: var(--font-display);
   font-weight: 600;
