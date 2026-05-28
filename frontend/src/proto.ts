@@ -112,15 +112,22 @@ export interface Player {
   id: number; // u32
   name: string;
   avatar: Avatar;
+  is_bot: boolean;
 }
 
 function writePlayer(w: Writer, p: Player): void {
   w.varint(p.id).str(p.name);
   writeAvatar(w, p.avatar);
+  w.bool(p.is_bot);
 }
 
 function readPlayer(r: Reader): Player {
-  return { id: r.varint(), name: r.str(), avatar: readAvatar(r) };
+  return {
+    id: r.varint(),
+    name: r.str(),
+    avatar: readAvatar(r),
+    is_bot: r.bool(),
+  };
 }
 
 export interface CompletedStroke {

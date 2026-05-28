@@ -57,11 +57,14 @@ fn arb_avatar() -> impl Strategy<Value = Avatar> {
 }
 
 fn arb_player() -> impl Strategy<Value = Player> {
-    (any::<u32>(), arb_name(), arb_avatar()).prop_map(|(id, name, avatar)| Player {
-        id,
-        name,
-        avatar,
-    })
+    (any::<u32>(), arb_name(), arb_avatar(), any::<bool>()).prop_map(
+        |(id, name, avatar, is_bot)| Player {
+            id,
+            name,
+            avatar,
+            is_bot,
+        },
+    )
 }
 
 // Realistic, not pathological. These bounds keep every generated message

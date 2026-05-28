@@ -123,6 +123,10 @@ pub struct Player {
     pub id: PlayerId,
     pub name: String,
     pub avatar: Avatar,
+    /// True if this player is a server-side bot. Surfaced to clients so the
+    /// UI can mark them and so we never assign one as host.
+    #[serde(default)]
+    pub is_bot: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

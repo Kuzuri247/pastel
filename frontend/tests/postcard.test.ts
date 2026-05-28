@@ -239,7 +239,7 @@ describe("client/server round-trips", () => {
       kind: "Welcome",
       you: 5,
       snapshot: {
-        players: [{ id: 1, name: "alice", avatar: DEFAULT_AVATAR }],
+        players: [{ id: 1, name: "alice", avatar: DEFAULT_AVATAR, is_bot: false }],
         completed: [
           {
             player: 1,
@@ -285,7 +285,7 @@ describe("client/server round-trips", () => {
     {
       kind: "Presence",
       seq: 7,
-      joined: [{ id: 4, name: "carol", avatar: DEFAULT_AVATAR }],
+      joined: [{ id: 4, name: "carol", avatar: DEFAULT_AVATAR, is_bot: false }],
       left: [2],
     },
     {
