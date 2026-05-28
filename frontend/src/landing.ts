@@ -3,7 +3,15 @@
 // Name + avatar are collected by the picker once the user lands in a room.
 
 import { MODE_OPTIONS } from "./game";
-import { setBgScene } from "./music";
+import {
+  enableBg,
+  isBgEnabled,
+  isBgPlaying,
+  loadBgPreference,
+  onBgPlaying,
+  setBgScene,
+  toggleBg,
+} from "./music";
 import { parseRoomCode, type GameMode } from "./proto";
 
 const STORAGE_MODE = "pastel.mode";
@@ -28,6 +36,13 @@ export function showLanding(): void {
 
   document.body.innerHTML = `
     <main class="landing">
+      <button id="landingMute" class="landing-mute" type="button"
+              aria-label="Toggle background music" title="Mute music">
+        <span class="landing-mute-bars" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+        </span>
+        <i class="ph ph-speaker-slash landing-mute-off-icon" aria-hidden="true"></i>
+      </button>
       <div class="landing-inner">
         <h1 class="logo"><span class="logo-text landing-logo">pastel</span></h1>
         <p class="landing-tag">draw. guess. laugh.</p>
@@ -89,6 +104,36 @@ export function showLanding(): void {
   const codeInput = document.getElementById("landingCode") as HTMLInputElement;
   const createForm = document.getElementById("landingForm") as HTMLFormElement;
   const joinForm = document.getElementById("landingJoin") as HTMLFormElement;
+  const muteBtn = document.getElementById("landingMute") as HTMLButtonElement | null;
+
+  function refreshMuteBtn(): void {
+    if (!muteBtn) return;
+    const on = isBgEnabled();
+    const playing = isBgPlaying();
+    muteBtn.classList.toggle("landing-mute--off", !on);
+    muteBtn.classList.toggle("landing-mute--playing", playing);
+    muteBtn.title = on
+      ? (playing ? "Mute music" : "Tap anywhere to play")
+      : "Unmute music";
+  }
+
+  onBgPlaying(() => refreshMuteBtn());
+
+  // Arm bg on the first user click anywhere on the landing page (browser
+  // autoplay policy requires a gesture before AudioContext can start). The
+  // user's saved preference defaults to ON unless they've turned it off.
+  if (loadBgPreference()) {
+    const arm = async () => { await enableBg(); refreshMuteBtn(); };
+    document.addEventListener("click", arm, { once: true });
+  }
+
+  muteBtn?.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    await toggleBg();
+    refreshMuteBtn();
+  });
+
+  refreshMuteBtn();
 
   for (const tile of document.querySelectorAll<HTMLLabelElement>(".mode-tile")) {
     tile.addEventListener("click", () => {
