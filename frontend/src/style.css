@@ -2327,23 +2327,35 @@ canvas {
 
   .sidebar--left {
     order: -1;
-    max-height: 60px;
-    overflow: hidden;
+    max-height: 56px;
+    /* overflow visible at the top so the host-crown / bot-dot indicators
+       above the avatar don't get clipped by the sidebar's height cap; the
+       sides still clip horizontally via the inner .players ul rule. */
+    overflow: visible;
   }
 
+  /* Hard-cap the stage so chat always gets the remaining vertical room.
+     Without this cap the grid's `auto` row lets stage grow to its content
+     height (canvas+toolbar+banner) and squeezes chat below the fold. */
   .stage {
     min-height: 0;
+    max-height: 58dvh;
     overflow: hidden;
+    gap: 6px;
   }
 
-  /* Clamp the canvas so the stage doesn't bully the chat off the screen.
-     Aspect-ratio keeps the drawing area squarish; the JS canvas internal
-     coords don't depend on display size so input still maps correctly. */
+  /* Clamp the canvas. width:auto + max-height keeps the 16:10 aspect-ratio
+     rule honoured (the canvas internal pixel grid is unchanged so input
+     still maps correctly). */
   #canvas {
-    max-height: 42dvh;
-    width: 100%;
+    max-height: 36dvh;
+    width: auto;
+    max-width: 100%;
     height: auto;
-    object-fit: contain;
+  }
+  .canvas-wrap {
+    display: flex;
+    justify-content: center;
   }
 
   .sidebar--right {
@@ -2448,35 +2460,38 @@ canvas {
     color: var(--muted);
     line-height: 1;
   }
-  /* Host crown overlay on the avatar instead of the host text badge. */
+  /* Host crown: small dot at top-right INSIDE the avatar bounds so the
+     row's height cap doesn't clip it. The "you" ring (full ring around
+     avatar) stays visible underneath. */
   .players li:has(.players-host) .players-avatar-wrap::before {
     content: "";
     position: absolute;
-    top: -3px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 8px;
-    height: 8px;
+    top: 0;
+    right: 0;
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
     background: #d4a0a8;
-    box-shadow: 0 0 0 1.5px #ffffff;
+    box-shadow: 0 0 0 1.5px var(--bg);
     z-index: 2;
   }
-  /* Bot dot overlay on bottom-right of avatar. */
+  /* Bot dot: bottom-right corner, also inside bounds. */
   .players li:has(.players-bot) .players-avatar-wrap::after {
     content: "";
     position: absolute;
-    bottom: -1px;
-    right: -1px;
-    width: 8px;
-    height: 8px;
+    bottom: 0;
+    right: 0;
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
     background: var(--muted);
     box-shadow: 0 0 0 1.5px var(--bg);
     z-index: 2;
   }
-  /* Pulse the "you" avatar so the user can spot themselves. */
-  .players li:has(.players-you) .players-avatar {
+  /* Ring the "you" avatar so the user can spot themselves. Use an inset
+     box-shadow on the wrap rather than around the SVG so it doesn't fight
+     for the same corner pixels as the host/bot dots. */
+  .players li:has(.players-you) .players-avatar-wrap {
     box-shadow: 0 0 0 2px var(--ink);
     border-radius: 50%;
   }
